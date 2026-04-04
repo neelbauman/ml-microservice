@@ -35,3 +35,10 @@ services:
     volumes:
       - ./source/libs/common/src:/app/source/libs/common/src
       - ./source/services/dashboard/src:/app/source/services/dashboard/src
+
+  training:
+    build:
+      target: dev
+    volumes:
+      - ./source/libs/common/src:/app/source/libs/common/src
+      - ./source/services/training/src:/app/source/services/training/src

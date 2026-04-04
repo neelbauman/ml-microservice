@@ -46,7 +46,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-mlflow}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mlflow}
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -261,21 +261,18 @@ services:
       minio: { condition: service_healthy }
       minio-init: { condition: service_completed_successfully }
       redpanda: { condition: service_healthy }
-    entrypoint: >
-      /bin/sh -c "
-      mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin} &&
-      mc admin config set local notify_kafka:training
-        brokers='redpanda:9092'
-        topic='training-data-events'
-        queue_dir='/tmp/kafka-queue'
-        queue_limit='10000' &&
-      mc admin service restart local --json &&
-      sleep 3 &&
-      mc event add local/ml-data arn:minio:sqs::training:kafka --event put --suffix .npy &&
-      mc event add local/ml-data arn:minio:sqs::training:kafka --event put --suffix .csv &&
-      mc event add local/ml-data arn:minio:sqs::training:kafka --event put --suffix .parquet &&
-      echo 'MinIO bucket notifications configured'
-      "
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin} &&
+        mc admin config set local notify_kafka:training enable=on brokers=redpanda:9092 topic=training-data-events queue_dir=/tmp/kafka-queue queue_limit=10000 &&
+        mc admin service restart local --json &&
+        sleep 8 &&
+        mc event remove local/ml-data arn:minio:sqs::training:kafka --force 2>/dev/null ;
+        mc event add local/ml-data arn:minio:sqs::training:kafka --event put --suffix .npy &&
+        mc event add local/ml-data arn:minio:sqs::training:kafka --event put --suffix .csv &&
+        mc event add local/ml-data arn:minio:sqs::training:kafka --event put --suffix .parquet &&
+        echo 'MinIO bucket notifications configured'
 
   # ============================================================
   # Dapr Sidecars

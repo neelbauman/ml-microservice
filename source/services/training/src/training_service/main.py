@@ -60,6 +60,9 @@ async def subscribe() -> list:
             "pubsubname": "pubsub",
             "topic": "training-data-events",
             "route": "/events/training-data",
+            "metadata": {
+                "rawPayload": "true",
+            },
         },
     ]
 
@@ -71,7 +74,7 @@ async def handle_training_data_event(request: dict, background: BackgroundTasks)
     MinIO sends S3-compatible event notifications through Kafka (Redpanda).
     The event payload follows the S3 event notification format.
     """
-    logger.info("data_event_received", event=request)
+    logger.info("data_event_received", payload=request)
 
     # Parse S3 event notification format
     data = request.get("data", request)
