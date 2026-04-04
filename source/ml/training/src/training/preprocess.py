@@ -13,7 +13,7 @@ setup_logging(os.getenv("LOG_LEVEL", "INFO"))
 logger = structlog.get_logger()
 
 OUTPUT_DIR = Path(os.getenv("DATA_OUTPUT_DIR", "/tmp/ml-data"))
-NUM_NORMAL = int(os.getenv("NUM_NORMAL_SAMPLES", "5000"))
+NUM_NORMAL = int(os.getenv("NUM_NORMAL_SAMPLES", "100000"))
 NUM_ANOMALY = int(os.getenv("NUM_ANOMALY_SAMPLES", "200"))
 NUM_FEATURES = int(os.getenv("NUM_FEATURES", "8"))
 

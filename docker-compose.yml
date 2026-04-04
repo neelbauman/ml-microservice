@@ -1,4 +1,3 @@
-
 x-dapr-env: &dapr-env
   DAPR_HTTP_PORT: "3500"
   DAPR_GRPC_PORT: "50001"
@@ -40,7 +39,7 @@ services:
       timeout: 3s
       retries: 5
 
-  postgres:
+  mlflow-postgres:
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-mlflow}
@@ -91,7 +90,7 @@ services:
   # ============================================================
   mlflow:
     build:
-      context: .
+      context: ./infrastructure/dockerfiles
       dockerfile: mlflow.Dockerfile
     command: >
       mlflow server
@@ -106,7 +105,7 @@ services:
     ports:
       - "5001:5000"
     depends_on:
-      postgres: { condition: service_healthy }
+      mlflow-postgres: { condition: service_healthy }
       minio:    { condition: service_healthy }
 
   # ============================================================

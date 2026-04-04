@@ -11,14 +11,14 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  オフライン: 学習パイプライン                                      │
-│  preprocess → train → evaluate → register → MLflow             │
+│  オフライン: 学習パイプライン                                   │
+│  preprocess → train → evaluate → register → MLflow              │
 └─────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────┐
-│  オンライン: 推論パイプライン (Dapr pub/sub で自動連鎖)              │
+│  オンライン: 推論パイプライン (Dapr pub/sub で自動連鎖)         │
 │                                                                 │
-│  データ投入                                                      │
+│  データ投入                                                     │
 │      │                                                          │
 │      ▼                                                          │
 │  Ingestion ──publish──▶ [raw-data]                              │
@@ -29,33 +29,33 @@
 │                                                      ▼          │
 │                                                 Inference       │
 │                                                   │    │        │
-│                                            結果保存  異常検知     │
+│                                            結果保存  異常検知   │
 │                                                        │        │
 │                                                        ▼        │
-│                                           Alert (通知・記録)     │
+│                                           Alert (通知・記録)    │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ### サービス一覧
 
-| サービス | ポート | 役割 |
-|---------|--------|------|
-| Ingestion | 8001 | センサーデータ受信、`raw-data` トピックへ publish |
-| Preprocessing | 8002 | 正規化・特徴量抽出、`preprocessed-data` へ publish |
-| Inference | 8003 | 異常スコア算出、閾値超過時に `alerts` へ publish |
-| Alert | 8004 | アラート記録・通知 |
+| サービス      | ポート | 役割                                               |
+|---------------|--------|----------------------------------------------------|
+| Ingestion     | 8001   | センサーデータ受信、`raw-data` トピックへ publish  |
+| Preprocessing | 8002   | 正規化・特徴量抽出、`preprocessed-data` へ publish |
+| Inference     | 8003   | 異常スコア算出、閾値超過時に `alerts` へ publish   |
+| Alert         | 8004   | アラート記録・通知                                 |
 
 ### インフラ一覧
 
-| コンポーネント | ポート | 役割 |
-|--------------|--------|------|
-| Redpanda | 19092 (Kafka API) | メッセージブローカー (Kafka 互換) |
-| Valkey | 6379 | ステートストア (Redis 互換) |
-| PostgreSQL | 5432 | MLflow バックエンドDB |
-| MinIO | 9000 / 9001 (Console) | S3 互換オブジェクトストレージ |
-| MLflow | 5001 | 実験追跡・モデルレジストリ |
-| Prometheus | 9090 | メトリクス収集 |
-| Grafana | 3000 | ダッシュボード (初期ログイン: admin/admin) |
+| コンポーネント | ポート                | 役割                                       |
+|----------------|-----------------------|--------------------------------------------|
+| Redpanda       | 19092 (Kafka API)     | メッセージブローカー (Kafka 互換)          |
+| Valkey         | 6379                  | ステートストア (Redis 互換)                |
+| PostgreSQL     | 5432                  | MLflow バックエンドDB                      |
+| MinIO          | 9000 / 9001 (Console) | S3 互換オブジェクトストレージ              |
+| MLflow         | 5001                  | 実験追跡・モデルレジストリ                 |
+| Prometheus     | 9090                  | メトリクス収集                             |
+| Grafana        | 3000                  | ダッシュボード (初期ログイン: admin/admin) |
 
 ---
 
@@ -75,15 +75,15 @@ cp .env.example .env  # 環境変数テンプレートをコピー
 
 `.env` に含まれる主な設定:
 
-| 変数 | デフォルト | 用途 |
-|------|-----------|------|
-| `AWS_ACCESS_KEY_ID` | `minioadmin` | MinIO / S3 認証 |
-| `AWS_SECRET_ACCESS_KEY` | `minioadmin` | MinIO / S3 認証 |
-| `MLFLOW_S3_ENDPOINT_URL` | `http://localhost:9000` | MLflow → MinIO 接続先 |
-| `MLFLOW_TRACKING_URI` | `http://localhost:5001` | MLflow サーバーの URL |
-| `MLFLOW_EXPERIMENT_NAME` | `anomaly-detection` | MLflow 実験名 |
-| `POSTGRES_DB` / `USER` / `PASSWORD` | `mlflow` | PostgreSQL 接続情報 |
-| `MINIO_ROOT_USER` / `PASSWORD` | `minioadmin` | MinIO 管理者認証 |
+| 変数                                | デフォルト              | 用途                  |
+|-------------------------------------|-------------------------|-----------------------|
+| `AWS_ACCESS_KEY_ID`                 | `minioadmin`            | MinIO / S3 認証       |
+| `AWS_SECRET_ACCESS_KEY`             | `minioadmin`            | MinIO / S3 認証       |
+| `MLFLOW_S3_ENDPOINT_URL`            | `http://localhost:9000` | MLflow → MinIO 接続先 |
+| `MLFLOW_TRACKING_URI`               | `http://localhost:5001` | MLflow サーバーの URL |
+| `MLFLOW_EXPERIMENT_NAME`            | `anomaly-detection`     | MLflow 実験名         |
+| `POSTGRES_DB` / `USER` / `PASSWORD` | `mlflow`                | PostgreSQL 接続情報   |
+| `MINIO_ROOT_USER` / `PASSWORD`      | `minioadmin`            | MinIO 管理者認証      |
 
 > **注意**: `.env` は `.gitignore` に含まれるため Git には追跡されない。`.env.example` がテンプレートとしてコミットされている。
 
