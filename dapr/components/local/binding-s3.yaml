@@ -1,0 +1,20 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: model-store
+spec:
+  type: bindings.aws.s3
+  version: v1
+  metadata:
+    - name: bucket
+      value: "ml-models"
+    - name: region
+      value: "us-east-1"
+    - name: endpoint
+      value: "http://minio:9000"
+    - name: accessKey
+      value: "minioadmin"
+    - name: secretKey
+      value: "minioadmin"
+    - name: forcePathStyle
+      value: "true"

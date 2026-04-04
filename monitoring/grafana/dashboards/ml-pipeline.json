@@ -1,0 +1,128 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "title": "Pub/Sub messages published (per topic)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "targets": [{
+        "expr": "rate(dapr_component_pubsub_ingress_count[1m])",
+        "legendFormat": "{{topic}}"
+      }],
+      "fieldConfig": {"defaults": {"unit": "ops"}}
+    },
+    {
+      "title": "Service invocation latency (p95)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "targets": [{
+        "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{handler!~\"/health|/dapr/subscribe|/metrics\"}[1m])) by (le, handler))",
+        "legendFormat": "{{handler}}"
+      }],
+      "fieldConfig": {"defaults": {"unit": "s"}}
+    },
+    {
+      "title": "Anomaly detection rate",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 8},
+      "targets": [{
+        "expr": "sum(rate(inference_anomalies_total[5m])) or vector(0)",
+        "legendFormat": "anomalies/sec"
+      }],
+      "fieldConfig": {"defaults": {"unit": "ops", "thresholds": {"steps": [
+        {"color": "green", "value": null},
+        {"color": "yellow", "value": 0.1},
+        {"color": "red", "value": 0.5}
+      ]}}}
+    },
+    {
+      "title": "Anomaly score distribution",
+      "type": "heatmap",
+      "gridPos": {"h": 8, "w": 6, "x": 6, "y": 8},
+      "targets": [{
+        "expr": "rate(inference_anomaly_score_bucket[5m])",
+        "legendFormat": "{{le}}",
+        "format": "heatmap"
+      }],
+      "fieldConfig": {"defaults": {}}
+    },
+    {
+      "title": "Inference predictions (total)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "targets": [
+        {
+          "expr": "rate(inference_predictions_total[1m])",
+          "legendFormat": "{{model_version}} anomaly={{is_anomaly}}"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ops"}}
+    },
+    {
+      "title": "Inference latency (p50 / p95 / p99)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(inference_latency_seconds_bucket[5m]))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(inference_latency_seconds_bucket[5m]))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, rate(inference_latency_seconds_bucket[5m]))",
+          "legendFormat": "p99"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "s"}}
+    },
+    {
+      "title": "Model status",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 16},
+      "targets": [{
+        "expr": "inference_model_loaded",
+        "legendFormat": "model loaded"
+      }],
+      "fieldConfig": {"defaults": {"mappings": [
+        {"type": "value", "options": {"0": {"text": "Fallback (Z-score)", "color": "yellow"}}},
+        {"type": "value", "options": {"1": {"text": "ONNX model", "color": "green"}}}
+      ]}}
+    },
+    {
+      "title": "State store operations",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+      "targets": [{
+        "expr": "rate(dapr_component_state_count[1m])",
+        "legendFormat": "{{app_id}} — {{operation}}"
+      }],
+      "fieldConfig": {"defaults": {"unit": "ops"}}
+    },
+    {
+      "title": "Dapr sidecar CPU",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+      "targets": [{
+        "expr": "rate(process_cpu_seconds_total{job=\"dapr-sidecars\"}[1m])",
+        "legendFormat": "{{instance}}"
+      }],
+      "fieldConfig": {"defaults": {"unit": "percentunit"}}
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["ml-pipeline", "dapr"],
+  "templating": {"list": []},
+  "time": {"from": "now-30m", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "ML Pipeline — Dapr Monitoring",
+  "uid": "ml-pipeline-dapr"
+}

@@ -1,0 +1,26 @@
+global:
+  scrape_interval: 10s
+  evaluation_interval: 10s
+
+scrape_configs:
+  - job_name: dapr-sidecars
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - "ingestion:9090"
+          - "preprocessing:9090"
+          - "inference:9090"
+          - "alert:9090"
+        labels:
+          source: dapr-sidecar
+
+  - job_name: services
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - "ingestion:8000"
+          - "preprocessing:8000"
+          - "inference:8000"
+          - "alert:8000"
+        labels:
+          source: application

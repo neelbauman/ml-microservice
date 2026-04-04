@@ -1,0 +1,20 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: pubsub
+spec:
+  type: pubsub.kafka
+  version: v1
+  metadata:
+    - name: brokers
+      value: "${MSK_BOOTSTRAP_BROKERS}"
+    - name: authType
+      value: "iam"
+    - name: awsRegion
+      value: "ap-northeast-1"
+    - name: consumerGroup
+      value: "ml-pipeline"
+    - name: maxMessageBytes
+      value: "1048576"
+    - name: version
+      value: "3.6.0"

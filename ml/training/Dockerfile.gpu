@@ -1,0 +1,20 @@
+FROM nvcr.io/nvidia/pytorch:24.07-py3
+
+WORKDIR /workspace
+
+RUN pip install --no-cache-dir uv
+
+COPY pyproject.toml uv.lock ./
+COPY libs/common/pyproject.toml libs/common/pyproject.toml
+COPY ml/training/pyproject.toml ml/training/pyproject.toml
+
+RUN uv sync --frozen --package ml-training --no-dev --no-install-workspace
+
+COPY libs/common/src/ libs/common/src/
+COPY ml/training/src/ ml/training/src/
+COPY ml/feast/ ml/feast/
+
+RUN uv sync --frozen --package ml-training --no-dev
+
+ENV PYTHONUNBUFFERED=1
+CMD ["uv", "run", "--package", "ml-training", "python", "-m", "training.train"]

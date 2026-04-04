@@ -1,0 +1,112 @@
+name: Build & Push
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/**"
+      - "libs/**"
+      - "ml/**"
+      - "pyproject.toml"
+      - "uv.lock"
+
+env:
+  AWS_REGION: ap-northeast-1
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      training: ${{ steps.changes.outputs.training }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            ingestion:
+              - 'services/ingestion/**'
+              - 'libs/common/**'
+            preprocessing:
+              - 'services/preprocessing/**'
+              - 'libs/common/**'
+            inference:
+              - 'services/inference/**'
+              - 'libs/common/**'
+            alert:
+              - 'services/alert/**'
+              - 'libs/common/**'
+            training:
+              - 'ml/**'
+              - 'libs/common/**'
+
+      - id: set-matrix
+        run: |
+          SERVICES=()
+          for svc in ingestion preprocessing inference alert; do
+            if [ "${{ steps.changes.outputs[svc] }}" == "true" ]; then
+              SERVICES+=("\"$svc\"")
+            fi
+          done
+          if [ ${#SERVICES[@]} -eq 0 ]; then
+            echo "matrix={\"service\":[]}" >> $GITHUB_OUTPUT
+          else
+            echo "matrix={\"service\":[$(IFS=,; echo "${SERVICES[*]}")]}" >> $GITHUB_OUTPUT
+          fi
+
+  build-services:
+    needs: detect-changes
+    if: ${{ fromJson(needs.detect-changes.outputs.matrix).service[0] != null }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJson(needs.detect-changes.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: services/${{ matrix.service }}/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.ecr.outputs.registry }}/ml-pipeline-${{ matrix.service }}:latest
+            ${{ steps.ecr.outputs.registry }}/ml-pipeline-${{ matrix.service }}:${{ github.sha }}
+
+  build-training:
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    if: needs.detect-changes.outputs.training == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
+
+      - name: Build and push training image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ml/training/Dockerfile.gpu
+          push: true
+          tags: |
+            ${{ steps.ecr.outputs.registry }}/ml-pipeline-training:latest
+            ${{ steps.ecr.outputs.registry }}/ml-pipeline-training:${{ github.sha }}

@@ -1,0 +1,66 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: ["Build & Push"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        default: "dev"
+        type: choice
+        options: [dev, prod]
+
+env:
+  AWS_REGION: ap-northeast-1
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    environment: ${{ inputs.environment || 'dev' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --name ml-pipeline-${{ inputs.environment || 'dev' }} \
+            --region ${{ env.AWS_REGION }}
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.0
+
+      - name: Deploy with Helm
+        run: |
+          ENV=${{ inputs.environment || 'dev' }}
+          helm upgrade --install ml-pipeline ./helm \
+            -f helm/values-${ENV}.yaml \
+            --namespace ml-pipeline \
+            --create-namespace \
+            --set global.imageRegistry=${{ secrets.ECR_REGISTRY }} \
+            --wait --timeout 10m
+
+      - name: Verify deployment
+        run: |
+          kubectl -n ml-pipeline rollout status deployment/ingestion --timeout=300s
+          kubectl -n ml-pipeline rollout status deployment/preprocessing --timeout=300s
+          kubectl -n ml-pipeline rollout status deployment/inference --timeout=300s
+          kubectl -n ml-pipeline rollout status deployment/alert --timeout=300s
+
+      - name: Notify on failure
+        if: failure()
+        run: echo "::error::Deployment failed. Check the logs above."

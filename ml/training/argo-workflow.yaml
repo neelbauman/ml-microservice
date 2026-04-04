@@ -1,0 +1,150 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: ml-training-
+  namespace: ml-pipeline
+  labels:
+    app: ml-training
+spec:
+  entrypoint: training-pipeline
+  serviceAccountName: ml-training-sa
+  arguments:
+    parameters:
+      - name: model-version
+        value: "v1.0.0"
+      - name: s3-data-path
+        value: "s3://ml-data/train/"
+      - name: experiment-name
+        value: "default"
+
+  ttlStrategy:
+    secondsAfterCompletion: 86400  # 24h
+
+  templates:
+    - name: training-pipeline
+      dag:
+        tasks:
+          - name: preprocess
+            template: preprocess-step
+            arguments:
+              parameters:
+                - name: s3-data-path
+                  value: "{{workflow.parameters.s3-data-path}}"
+
+          - name: train
+            template: train-step
+            dependencies: [preprocess]
+            arguments:
+              parameters:
+                - name: model-version
+                  value: "{{workflow.parameters.model-version}}"
+                - name: experiment-name
+                  value: "{{workflow.parameters.experiment-name}}"
+
+          - name: evaluate
+            template: evaluate-step
+            dependencies: [train]
+            arguments:
+              parameters:
+                - name: model-version
+                  value: "{{workflow.parameters.model-version}}"
+
+          - name: register
+            template: register-step
+            dependencies: [evaluate]
+            arguments:
+              parameters:
+                - name: model-version
+                  value: "{{workflow.parameters.model-version}}"
+
+    - name: preprocess-step
+      inputs:
+        parameters:
+          - name: s3-data-path
+      container:
+        image: "{{workflow.parameters.ecr-registry}}/ml-pipeline-training:latest"
+        command: [python, -m, training.preprocess]
+        env:
+          - name: S3_DATA_PATH
+            value: "{{inputs.parameters.s3-data-path}}"
+          - name: AWS_DEFAULT_REGION
+            value: ap-northeast-1
+        resources:
+          requests:
+            cpu: "2"
+            memory: "4Gi"
+          limits:
+            cpu: "4"
+            memory: "8Gi"
+
+    - name: train-step
+      inputs:
+        parameters:
+          - name: model-version
+          - name: experiment-name
+      container:
+        image: "{{workflow.parameters.ecr-registry}}/ml-pipeline-training:latest"
+        command: [python, -m, training.train]
+        env:
+          - name: MLFLOW_TRACKING_URI
+            value: "http://mlflow.ml-platform.svc.cluster.local:5000"
+          - name: MLFLOW_EXPERIMENT_NAME
+            value: "{{inputs.parameters.experiment-name}}"
+          - name: MODEL_VERSION
+            value: "{{inputs.parameters.model-version}}"
+          - name: AWS_DEFAULT_REGION
+            value: ap-northeast-1
+        resources:
+          requests:
+            cpu: "4"
+            memory: "16Gi"
+            nvidia.com/gpu: "1"
+          limits:
+            cpu: "8"
+            memory: "32Gi"
+            nvidia.com/gpu: "1"
+      nodeSelector:
+        role: gpu
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+
+    - name: evaluate-step
+      inputs:
+        parameters:
+          - name: model-version
+      container:
+        image: "{{workflow.parameters.ecr-registry}}/ml-pipeline-training:latest"
+        command: [python, -m, training.evaluate]
+        env:
+          - name: MLFLOW_TRACKING_URI
+            value: "http://mlflow.ml-platform.svc.cluster.local:5000"
+          - name: MODEL_VERSION
+            value: "{{inputs.parameters.model-version}}"
+        resources:
+          requests:
+            cpu: "2"
+            memory: "8Gi"
+          limits:
+            cpu: "4"
+            memory: "16Gi"
+
+    - name: register-step
+      inputs:
+        parameters:
+          - name: model-version
+      container:
+        image: "{{workflow.parameters.ecr-registry}}/ml-pipeline-training:latest"
+        command: [python, -m, training.register]
+        env:
+          - name: MLFLOW_TRACKING_URI
+            value: "http://mlflow.ml-platform.svc.cluster.local:5000"
+          - name: MODEL_VERSION
+            value: "{{inputs.parameters.model-version}}"
+          - name: MODEL_BUCKET
+            value: "${S3_MODEL_BUCKET}"
+        resources:
+          requests:
+            cpu: "1"
+            memory: "2Gi"

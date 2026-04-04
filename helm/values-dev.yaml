@@ -1,0 +1,14 @@
+global:
+  env: dev
+  imageRegistry: ""
+  imagePullPolicy: Always
+
+services:
+  ingestion:
+    replicas: 1
+  preprocessing:
+    replicas: 1
+  inference:
+    replicas: 1
+  alert:
+    replicas: 1

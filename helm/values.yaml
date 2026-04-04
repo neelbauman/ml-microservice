@@ -1,0 +1,94 @@
+# Default values — overridden by values-dev.yaml / values-prod.yaml
+global:
+  env: dev
+  region: ap-northeast-1
+  imageRegistry: ""
+  imagePullPolicy: IfNotPresent
+
+dapr:
+  enabled: true
+  sidecar:
+    logLevel: info
+    metricsPort: 9090
+  components:
+    pubsub:
+      type: pubsub.kafka
+      brokers: "redpanda:9092"
+      authType: "none"
+    statestore:
+      type: state.redis
+      host: "valkey:6379"
+      enableTLS: false
+
+services:
+  ingestion:
+    replicas: 1
+    image:
+      repository: ml-pipeline-ingestion
+      tag: latest
+    port: 8000
+    resources:
+      requests:
+        cpu: "250m"
+        memory: "256Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+    hpa:
+      enabled: false
+
+  preprocessing:
+    replicas: 1
+    image:
+      repository: ml-pipeline-preprocessing
+      tag: latest
+    port: 8000
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "512Mi"
+      limits:
+        cpu: "1"
+        memory: "1Gi"
+    hpa:
+      enabled: false
+
+  inference:
+    replicas: 1
+    image:
+      repository: ml-pipeline-inference
+      tag: latest
+    port: 8000
+    resources:
+      requests:
+        cpu: "1"
+        memory: "2Gi"
+      limits:
+        cpu: "2"
+        memory: "4Gi"
+    hpa:
+      enabled: false
+    nodeSelector: {}
+    tolerations: []
+
+  alert:
+    replicas: 1
+    image:
+      repository: ml-pipeline-alert
+      tag: latest
+    port: 8000
+    resources:
+      requests:
+        cpu: "250m"
+        memory: "256Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+    hpa:
+      enabled: false
+
+monitoring:
+  prometheus:
+    remoteWrite:
+      enabled: false
+      url: ""

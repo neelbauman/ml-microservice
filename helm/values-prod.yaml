@@ -1,0 +1,95 @@
+global:
+  env: production
+  region: ap-northeast-1
+  imageRegistry: "${AWS_ACCOUNT_ID}.dkr.ecr.ap-northeast-1.amazonaws.com"
+  imagePullPolicy: IfNotPresent
+
+dapr:
+  enabled: true
+  sidecar:
+    logLevel: warn
+  components:
+    pubsub:
+      type: pubsub.kafka
+      brokers: "${MSK_BOOTSTRAP_BROKERS}"
+      authType: iam
+    statestore:
+      type: state.redis
+      host: "${ELASTICACHE_ENDPOINT}"
+      enableTLS: true
+
+services:
+  ingestion:
+    replicas: 3
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "512Mi"
+      limits:
+        cpu: "1"
+        memory: "1Gi"
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 10
+      targetCPUUtilization: 70
+
+  preprocessing:
+    replicas: 3
+    resources:
+      requests:
+        cpu: "1"
+        memory: "1Gi"
+      limits:
+        cpu: "2"
+        memory: "2Gi"
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 8
+      targetCPUUtilization: 75
+
+  inference:
+    replicas: 2
+    resources:
+      requests:
+        cpu: "2"
+        memory: "4Gi"
+      limits:
+        cpu: "4"
+        memory: "8Gi"
+        nvidia.com/gpu: "1"
+    nodeSelector:
+      role: gpu
+    tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 8
+      metrics:
+        - type: Pods
+          pods:
+            metric:
+              name: inference_latency_p95
+            target:
+              type: AverageValue
+              averageValue: "100m"
+
+  alert:
+    replicas: 2
+    resources:
+      requests:
+        cpu: "250m"
+        memory: "256Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+
+monitoring:
+  prometheus:
+    remoteWrite:
+      enabled: true
+      url: "https://aps-workspaces.ap-northeast-1.amazonaws.com/workspaces/${AMP_WORKSPACE_ID}/api/v1/remote_write"

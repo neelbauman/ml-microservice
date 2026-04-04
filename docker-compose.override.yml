@@ -1,0 +1,30 @@
+# Dev overrides — auto-loaded by docker compose.
+# Switches to dev target (editable install + reload) and mounts source.
+services:
+  ingestion:
+    build:
+      target: dev
+    volumes:
+      - ./libs/common/src:/app/libs/common/src
+      - ./services/ingestion/src:/app/services/ingestion/src
+
+  preprocessing:
+    build:
+      target: dev
+    volumes:
+      - ./libs/common/src:/app/libs/common/src
+      - ./services/preprocessing/src:/app/services/preprocessing/src
+
+  inference:
+    build:
+      target: dev
+    volumes:
+      - ./libs/common/src:/app/libs/common/src
+      - ./services/inference/src:/app/services/inference/src
+
+  alert:
+    build:
+      target: dev
+    volumes:
+      - ./libs/common/src:/app/libs/common/src
+      - ./services/alert/src:/app/services/alert/src

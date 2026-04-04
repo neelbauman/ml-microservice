@@ -1,0 +1,72 @@
+{{- range $name, $svc := .Values.services }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    app: {{ $name }}
+    {{- include "ml-pipeline.labels" $ | nindent 4 }}
+spec:
+  replicas: {{ $svc.replicas }}
+  selector:
+    matchLabels:
+      app: {{ $name }}
+  template:
+    metadata:
+      labels:
+        app: {{ $name }}
+        {{- include "ml-pipeline.selectorLabels" $ | nindent 8 }}
+      annotations:
+        {{- if $.Values.dapr.enabled }}
+        dapr.io/enabled: "true"
+        dapr.io/app-id: {{ $name | quote }}
+        dapr.io/app-port: {{ $svc.port | quote }}
+        dapr.io/log-level: {{ $.Values.dapr.sidecar.logLevel | quote }}
+        dapr.io/metrics-port: {{ $.Values.dapr.sidecar.metricsPort | quote }}
+        dapr.io/enable-metrics: "true"
+        dapr.io/sidecar-cpu-request: "100m"
+        dapr.io/sidecar-memory-request: "128Mi"
+        {{- end }}
+    spec:
+      {{- if $svc.nodeSelector }}
+      nodeSelector:
+        {{- toYaml $svc.nodeSelector | nindent 8 }}
+      {{- end }}
+      {{- if $svc.tolerations }}
+      tolerations:
+        {{- toYaml $svc.tolerations | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ $name }}
+          image: {{ include "ml-pipeline.imageRef" (dict "global" $.Values.global "svc" $svc) }}
+          imagePullPolicy: {{ $.Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: {{ $svc.port }}
+              name: http
+          env:
+            - name: SERVICE_NAME
+              value: {{ $name | quote }}
+            - name: LOG_LEVEL
+              value: "INFO"
+            - name: DAPR_HTTP_PORT
+              value: "3500"
+            - name: DAPR_GRPC_PORT
+              value: "50001"
+          resources:
+            {{- toYaml $svc.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+{{- end }}

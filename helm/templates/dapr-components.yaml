@@ -1,0 +1,44 @@
+{{- if .Values.dapr.enabled }}
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: pubsub
+spec:
+  type: {{ .Values.dapr.components.pubsub.type }}
+  version: v1
+  metadata:
+    - name: brokers
+      value: {{ .Values.dapr.components.pubsub.brokers | quote }}
+    - name: authType
+      value: {{ .Values.dapr.components.pubsub.authType | quote }}
+    - name: consumerGroup
+      value: "ml-pipeline"
+    {{- if eq .Values.dapr.components.pubsub.authType "iam" }}
+    - name: awsRegion
+      value: {{ .Values.global.region | quote }}
+    {{- end }}
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: statestore
+spec:
+  type: {{ .Values.dapr.components.statestore.type }}
+  version: v1
+  metadata:
+    - name: redisHost
+      value: {{ .Values.dapr.components.statestore.host | quote }}
+    - name: enableTLS
+      value: {{ .Values.dapr.components.statestore.enableTLS | quote }}
+    - name: actorStateStore
+      value: "true"
+    - name: keyPrefix
+      value: "ml-pipeline"
+    {{- if .Values.dapr.components.statestore.enableTLS }}
+    - name: redisPassword
+      secretKeyRef:
+        name: elasticache-credentials
+        key: password
+    {{- end }}
+{{- end }}

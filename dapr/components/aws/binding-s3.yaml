@@ -1,0 +1,14 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: model-store
+spec:
+  type: bindings.aws.s3
+  version: v1
+  metadata:
+    - name: bucket
+      value: "${S3_MODEL_BUCKET}"
+    - name: region
+      value: "ap-northeast-1"
+    - name: authProfile
+      value: "irsa"
