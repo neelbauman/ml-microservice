@@ -118,7 +118,7 @@ services:
       dockerfile: mlflow.Dockerfile
     command: >
       mlflow server
-        --backend-store-uri postgresql://${POSTGRES_USER:-mlflow}:${POSTGRES_PASSWORD:-mlflow}@postgres:5432/${POSTGRES_DB:-mlflow}
+        --backend-store-uri postgresql://${POSTGRES_USER:-mlflow}:${POSTGRES_PASSWORD:-mlflow}@mlflow-postgres:5432/${POSTGRES_DB:-mlflow}
         --default-artifact-root s3://mlflow-artifacts/
         --host 0.0.0.0 --port 5000
         --disable-security-middleware
@@ -269,7 +269,7 @@ services:
         topic='training-data-events'
         queue_dir='/tmp/kafka-queue'
         queue_limit='10000' &&
-      mc admin service restart local &&
+      mc admin service restart local --json &&
       sleep 3 &&
       mc event add local/ml-data arn:minio:sqs::training:kafka --event put --suffix .npy &&
       mc event add local/ml-data arn:minio:sqs::training:kafka --event put --suffix .csv &&
