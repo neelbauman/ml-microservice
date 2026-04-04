@@ -11,18 +11,25 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  オフライン: 学習ワークフロー (Training Service + Prefect)       │
 │                                                                 │
-│  [S3/MinIO ファイル配置] ──▶ [training-data-events] ──▶ Training │
+│  オフライン: 学習ワークフロー (Training Service + Prefect)      │
+│                                                                 │
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│  [S3/MinIO ファイル配置] ──▶ [training-data-events] ──▶ Training│
 │  [手動 POST /trigger]    ──▶                            Service │
 │  [スケジュール]          ──▶                              │     │
 │                                                           ▼     │
-│            Prefect Flow: preprocess → validate → train           │
-│                          → evaluate → register → MLflow          │
+│            Prefect Flow: preprocess → validate → train          │
+│                          → evaluate → register → MLflow         │
+│                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
 │  オンライン: 推論パイプライン (Dapr pub/sub で自動連鎖)         │
+│                                                                 │
+┌─────────────────────────────────────────────────────────────────┐
 │                                                                 │
 │  データ投入                                                     │
 │      │                                                          │
@@ -39,6 +46,7 @@
 │                                                        │        │
 │                                                        ▼        │
 │                                           Alert (通知・記録)    │
+│                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -51,7 +59,7 @@
 | Inference     | 8003   | 異常スコア算出、閾値超過時に `alerts` へ publish   |
 | Alert         | 8004   | アラート記録・通知                                 |
 | Dashboard     | 8005   | リアルタイム UI (SSE)                              |
-| Training      | 8006   | 学習ワークフロー (Prefect + Dapr トリガー)        |
+| Training      | 8006   | 学習ワークフロー (Prefect + Dapr トリガー)         |
 
 ### インフラ一覧
 
@@ -451,14 +459,14 @@ make logs-inference      # 例: inference のログ
 
 ### 5.2 監視ダッシュボード
 
-| ツール | URL | 用途 |
-|--------|-----|------|
-| Grafana | http://localhost:3000 | メトリクスダッシュボード |
-| Prometheus | http://localhost:9090 | メトリクスクエリ |
-| MLflow | http://localhost:5001 | 学習実験・モデル管理 |
-| Prefect | http://localhost:4200 | 学習ワークフロー管理 |
-| MinIO Console | http://localhost:9001 | オブジェクトストレージ (minioadmin/minioadmin) |
-| Redpanda Console | http://localhost:19644 | ブローカーステータス |
+| ツール           | URL                    | 用途                                           |
+|------------------|------------------------|------------------------------------------------|
+| Grafana          | http://localhost:3000  | メトリクスダッシュボード                       |
+| Prometheus       | http://localhost:9090  | メトリクスクエリ                               |
+| MLflow           | http://localhost:5001  | 学習実験・モデル管理                           |
+| Prefect          | http://localhost:4200  | 学習ワークフロー管理                           |
+| MinIO Console    | http://localhost:9001  | オブジェクトストレージ (minioadmin/minioadmin) |
+| Redpanda Console | http://localhost:19644 | ブローカーステータス                           |
 
 ### 5.3 Kafka トピックの確認
 
@@ -494,69 +502,52 @@ docker compose exec valkey valkey-cli
 > GET "alert||alert:last:sensor-A"
 ```
 
-### 5.5 よくあるトラブル
-
-| 症状 | 原因 | 対処 |
-|------|------|------|
-| `[x]` で seed が失敗 | Dapr sidecar → Redpanda の接続失敗 | `make health` で Dapr sidecar の状態を確認。Redpanda の `advertised_kafka_api` が `redpanda:9092` になっているか確認 |
-| `[!] Connection refused` | サービスが未起動 | `make up` で起動、`make status` で確認 |
-| Preprocessing が動かない | Dapr subscription が未登録 | `curl http://localhost:8002/dapr/subscribe` でルート確認。sidecar を再起動 |
-| 推論結果が `no data` | データがまだ流れていない | `make seed` でデータ投入 |
-| MLflow に接続できない | PostgreSQL / MinIO 未起動 | `make up-infra` でインフラ起動、`make health` で確認 |
-| `NoCredentialsError` (学習時) | MinIO 認証情報が未設定 | `.env` が存在するか確認。`cp .env.example .env` で作成 |
-| `model_load_failed` (推論) | inference → MLflow 接続失敗 | `docker compose logs inference` で詳細確認。MLflow が起動しているか `make health` で確認 |
-| `model_update_publish_failed` | register.py → Dapr sidecar 接続失敗 | `make up` でサービスが起動しているか確認。`.env` の `DAPR_HTTP_PORT=3501` を確認 |
-| コンテナの状態がおかしい | ボリュームの不整合 | `make clean && make up` で完全リセット |
-| ファイル配置しても学習が始まらない | MinIO Bucket Notification 未設定 | `docker compose logs minio-notify-init` で設定ログ確認。`make clean && make up` で再設定 |
-| Prefect UI にフローが表示されない | Prefect Server 未起動 | `docker compose logs prefect-server` で確認。`PREFECT_API_URL` が正しいか確認 |
-| 学習トリガー後にフローが失敗 | MLflow/MinIO 接続エラー | `docker compose logs training` でエラー確認。`make health` でインフラ状態確認 |
-
 ---
 
 ## 6. コマンドリファレンス
 
 ### 環境管理
 
-| コマンド | 説明 |
-|---------|------|
-| `make setup` | 全パッケージインストール |
-| `make up` | 全コンテナ起動 |
-| `make up-infra` | インフラのみ起動 |
-| `make down` | コンテナ停止 |
-| `make clean` | コンテナ停止 + ボリューム削除 |
-| `make status` | コンテナ状態確認 |
-| `make health` | 全ヘルスチェック |
+| コマンド        | 説明                          |
+|-----------------|-------------------------------|
+| `make setup`    | 全パッケージインストール      |
+| `make up`       | 全コンテナ起動                |
+| `make up-infra` | インフラのみ起動              |
+| `make down`     | コンテナ停止                  |
+| `make clean`    | コンテナ停止 + ボリューム削除 |
+| `make status`   | コンテナ状態確認              |
+| `make health`   | 全ヘルスチェック              |
 
 ### オンラインパイプライン
 
-| コマンド | 説明 |
-|---------|------|
-| `make seed` | サンプルデータ投入 (12 件) |
-| `make seed-continuous` | 連続データ投入 (1/sec) |
-| `make watch` | リアルタイムモニター |
-| `make demo` | 起動→投入→監視を一括実行 |
+| コマンド               | 説明                       |
+|------------------------|----------------------------|
+| `make seed`            | サンプルデータ投入 (12 件) |
+| `make seed-continuous` | 連続データ投入 (1/sec)     |
+| `make watch`           | リアルタイムモニター       |
+| `make demo`            | 起動→投入→監視を一括実行   |
 
 ### モデル学習
 
-| コマンド | 説明 |
-|---------|------|
-| `make train-preprocess` | 学習データ生成 |
-| `make train` | モデル学習 |
-| `make train-evaluate` | モデル評価 |
-| `make train-register` | MLflow に登録 + 推論サービスへ自動デプロイ |
-| `make train-all` | 上記 4 ステップを一括実行 |
-| `make run-training` | 学習ワークフローサービスをホットリロード起動 |
-| `make train-trigger` | ワークフローサービス経由で学習トリガー |
-| `make train-trigger-s3` | S3 パス指定で再学習トリガー (`S3_PATH=...`) |
+| コマンド                | 説明                                         |
+|-------------------------|----------------------------------------------|
+| `make train-preprocess` | 学習データ生成                               |
+| `make train`            | モデル学習                                   |
+| `make train-evaluate`   | モデル評価                                   |
+| `make train-register`   | MLflow に登録 + 推論サービスへ自動デプロイ   |
+| `make train-all`        | 上記 4 ステップを一括実行                    |
+| `make run-training`     | 学習ワークフローサービスをホットリロード起動 |
+| `make train-trigger`    | ワークフローサービス経由で学習トリガー       |
+| `make train-trigger-s3` | S3 パス指定で再学習トリガー (`S3_PATH=...`)  |
 
 ### 開発・運用
 
-| コマンド | 説明 |
-|---------|------|
-| `make logs` | 全ログ tail |
-| `make logs-<service>` | 個別サービスのログ |
-| `make test` | 全テスト実行 |
-| `make lint` | lint チェック |
-| `make build` | 全 Docker イメージビルド |
-| `make create-topics` | Kafka トピック手動作成 |
-| `make run-<service>` | ホスト側で個別サービスを hot-reload 起動 |
+| コマンド              | 説明                                     |
+|-----------------------|------------------------------------------|
+| `make logs`           | 全ログ tail                              |
+| `make logs-<service>` | 個別サービスのログ                       |
+| `make test`           | 全テスト実行                             |
+| `make lint`           | lint チェック                            |
+| `make build`          | 全 Docker イメージビルド                 |
+| `make create-topics`  | Kafka トピック手動作成                   |
+| `make run-<service>`  | ホスト側で個別サービスを hot-reload 起動 |
