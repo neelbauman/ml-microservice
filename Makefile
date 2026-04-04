@@ -172,6 +172,15 @@ seed: ## Send sample data through the pipeline
 seed-continuous: ## Continuous data stream (1/sec)
 	uv run python scripts/seed_data.py --continuous
 
+seed-training: ## Generate training data and upload to MinIO (triggers auto-training)
+	uv run python scripts/seed_training_data.py
+
+seed-training-small: ## Generate small training data for quick testing
+	uv run python scripts/seed_training_data.py --normal 1000 --anomaly 50
+
+seed-training-local: ## Generate training data to /tmp/ml-data (no upload)
+	uv run python scripts/seed_training_data.py --local-only
+
 health: ## Check health of all services + Dapr
 	uv run python scripts/health_check.py
 
