@@ -60,6 +60,8 @@ jobs:
           kubectl -n ml-pipeline rollout status deployment/preprocessing --timeout=300s
           kubectl -n ml-pipeline rollout status deployment/inference --timeout=300s
           kubectl -n ml-pipeline rollout status deployment/alert --timeout=300s
+          kubectl -n ml-pipeline rollout status deployment/dashboard --timeout=300s
+          kubectl -n ml-pipeline rollout status deployment/training --timeout=300s
 
       - name: Notify on failure
         if: failure()

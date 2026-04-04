@@ -14,6 +14,14 @@ MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5001")
 MODEL_STORE_PATH = Path(os.getenv("MODEL_STORE_PATH", "/models"))
 
 
+def _get_ort_providers() -> list[str]:
+    """Return ONNX Runtime execution providers, preferring GPU when available."""
+    available = ort.get_available_providers()
+    preferred = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    providers = [p for p in preferred if p in available]
+    return providers or ["CPUExecutionProvider"]
+
+
 class ModelManager:
     """Thread-safe ONNX model lifecycle manager.
 
@@ -83,9 +91,10 @@ class ModelManager:
 
         onnx_path = onnx_files[0]
 
-        # Create new session
+        # Create new session with GPU support if available
+        providers = _get_ort_providers()
         new_session = await asyncio.to_thread(
-            ort.InferenceSession, str(onnx_path),
+            ort.InferenceSession, str(onnx_path), providers=providers,
         )
 
         # Read input dimensions from the model
@@ -106,6 +115,7 @@ class ModelManager:
             onnx_path=str(onnx_path),
             input_dim=self._input_dim,
             anomaly_threshold=self._anomaly_threshold,
+            ort_providers=new_session.get_providers(),
         )
 
     async def try_load_latest(self, registry_name: str = "anomaly-detector") -> bool:

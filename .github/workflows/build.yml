@@ -4,9 +4,9 @@ on:
   push:
     branches: [main]
     paths:
-      - "services/**"
-      - "libs/**"
-      - "ml/**"
+      - "source/services/**"
+      - "source/libs/**"
+      - "source/ml/**"
       - "pyproject.toml"
       - "uv.lock"
 
@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
-      training: ${{ steps.changes.outputs.training }}
+      training-gpu: ${{ steps.changes.outputs.training-gpu }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -30,25 +30,32 @@ jobs:
         with:
           filters: |
             ingestion:
-              - 'services/ingestion/**'
-              - 'libs/common/**'
+              - 'source/services/ingestion/**'
+              - 'source/libs/common/**'
             preprocessing:
-              - 'services/preprocessing/**'
-              - 'libs/common/**'
+              - 'source/services/preprocessing/**'
+              - 'source/libs/common/**'
             inference:
-              - 'services/inference/**'
-              - 'libs/common/**'
+              - 'source/services/inference/**'
+              - 'source/libs/common/**'
             alert:
-              - 'services/alert/**'
-              - 'libs/common/**'
+              - 'source/services/alert/**'
+              - 'source/libs/common/**'
+            dashboard:
+              - 'source/services/dashboard/**'
+              - 'source/libs/common/**'
             training:
-              - 'ml/**'
-              - 'libs/common/**'
+              - 'source/services/training/**'
+              - 'source/ml/training/**'
+              - 'source/libs/common/**'
+            training-gpu:
+              - 'source/ml/training/**'
+              - 'source/libs/common/**'
 
       - id: set-matrix
         run: |
           SERVICES=()
-          for svc in ingestion preprocessing inference alert; do
+          for svc in ingestion preprocessing inference alert dashboard training; do
             if [ "${{ steps.changes.outputs[svc] }}" == "true" ]; then
               SERVICES+=("\"$svc\"")
             fi
@@ -80,16 +87,18 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: services/${{ matrix.service }}/Dockerfile
+          file: source/services/${{ matrix.service }}/Dockerfile
           push: true
           tags: |
             ${{ steps.ecr.outputs.registry }}/ml-pipeline-${{ matrix.service }}:latest
             ${{ steps.ecr.outputs.registry }}/ml-pipeline-${{ matrix.service }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 
-  build-training:
+  build-training-gpu:
     needs: detect-changes
     runs-on: ubuntu-latest
-    if: needs.detect-changes.outputs.training == 'true'
+    if: needs.detect-changes.outputs.training-gpu == 'true'
     steps:
       - uses: actions/checkout@v4
 
@@ -101,12 +110,14 @@ jobs:
       - uses: aws-actions/amazon-ecr-login@v2
         id: ecr
 
-      - name: Build and push training image
+      - name: Build and push training GPU image
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ml/training/Dockerfile.gpu
+          file: source/ml/training/Dockerfile.gpu
           push: true
           tags: |
-            ${{ steps.ecr.outputs.registry }}/ml-pipeline-training:latest
-            ${{ steps.ecr.outputs.registry }}/ml-pipeline-training:${{ github.sha }}
+            ${{ steps.ecr.outputs.registry }}/ml-pipeline-training-gpu:latest
+            ${{ steps.ecr.outputs.registry }}/ml-pipeline-training-gpu:${{ github.sha }}
+          cache-from: type=gha,scope=training-gpu
+          cache-to: type=gha,mode=max,scope=training-gpu

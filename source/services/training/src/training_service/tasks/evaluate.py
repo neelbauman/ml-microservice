@@ -14,6 +14,13 @@ from training.train import _build_model
 logger = structlog.get_logger()
 
 
+def _get_device() -> torch.device:
+    """Select the best available device (CUDA > CPU)."""
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    return torch.device("cpu")
+
+
 @task(name="evaluate-model", retries=0)
 def evaluate_model(
     data_dir: str,
@@ -28,6 +35,9 @@ def evaluate_model(
 
     Returns evaluation metrics dict.
     """
+    device = _get_device()
+    logger.info("evaluate_start", device=str(device))
+
     data_path = Path(data_dir)
     model_dir = Path(model_output_dir)
 
@@ -38,12 +48,13 @@ def evaluate_model(
     # Rebuild model and load weights
     model = _build_model(input_dim, latent_dim)
     model.load_state_dict(torch.load(model_dir / f"model-{model_version}.pt", weights_only=True))
+    model.to(device)
     model.eval()
 
     with torch.no_grad():
-        x = torch.from_numpy(eval_data)
+        x = torch.from_numpy(eval_data).to(device)
         recon = model(x)
-        scores = ((x - recon) ** 2).mean(dim=1).numpy()
+        scores = ((x - recon) ** 2).mean(dim=1).cpu().numpy()
 
     preds = (scores > anomaly_threshold).astype(int)
 

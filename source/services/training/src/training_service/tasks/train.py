@@ -14,6 +14,13 @@ from training.train import _build_model
 logger = structlog.get_logger()
 
 
+def _get_device() -> torch.device:
+    """Select the best available device (CUDA > CPU)."""
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    return torch.device("cpu")
+
+
 @task(name="train-model", retries=0, timeout_seconds=3600)
 def train_model(
     data_dir: str,
@@ -30,6 +37,9 @@ def train_model(
 
     Returns dict with run_id, model_path, onnx_path.
     """
+    device = _get_device()
+    logger.info("train_start", device=str(device))
+
     data_path = Path(data_dir)
     output_path = Path(model_output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -42,7 +52,7 @@ def train_model(
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
     # Build model
-    model = _build_model(input_dim, latent_dim)
+    model = _build_model(input_dim, latent_dim).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     criterion = nn.MSELoss()
 
@@ -59,12 +69,14 @@ def train_model(
                 "batch_size": batch_size,
                 "learning_rate": learning_rate,
                 "model_version": model_version,
+                "device": str(device),
             }
         )
 
         for epoch in range(epochs):
             total_loss = 0.0
             for (batch,) in loader:
+                batch = batch.to(device)
                 optimizer.zero_grad()
                 output = model(batch)
                 loss = criterion(output, batch)
@@ -78,9 +90,9 @@ def train_model(
             if (epoch + 1) % 10 == 0:
                 logger.info("epoch", epoch=epoch + 1, loss=round(avg_loss, 6))
 
-        # Save model artifacts
+        # Save model artifacts (always on CPU for portability)
         model_path = output_path / f"model-{model_version}.pt"
-        torch.save(model.state_dict(), model_path)
+        torch.save(model.cpu().state_dict(), model_path)
 
         model.eval()
         onnx_path = output_path / f"model-{model_version}.onnx"

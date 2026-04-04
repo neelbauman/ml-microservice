@@ -51,8 +51,16 @@ def _build_model(input_dim: int, latent_dim: int) -> nn.Module:
     return _AE()
 
 
+def _get_device() -> torch.device:
+    """Select the best available device (CUDA > CPU)."""
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    return torch.device("cpu")
+
+
 def main() -> None:
-    logger.info("train_start", model_version=MODEL_VERSION, epochs=EPOCHS)
+    device = _get_device()
+    logger.info("train_start", model_version=MODEL_VERSION, epochs=EPOCHS, device=str(device))
 
     # Load data
     train_data = np.load(DATA_DIR / "train.npy")
@@ -64,7 +72,7 @@ def main() -> None:
     loader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
 
     # Model
-    model = _build_model(input_dim, LATENT_DIM)
+    model = _build_model(input_dim, LATENT_DIM).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
     criterion = nn.MSELoss()
 
@@ -80,12 +88,14 @@ def main() -> None:
             "batch_size": BATCH_SIZE,
             "learning_rate": LR,
             "model_version": MODEL_VERSION,
+            "device": str(device),
         })
 
         # Training loop
         for epoch in range(EPOCHS):
             total_loss = 0.0
             for (batch,) in loader:
+                batch = batch.to(device)
                 optimizer.zero_grad()
                 output = model(batch)
                 loss = criterion(output, batch)
@@ -99,12 +109,12 @@ def main() -> None:
             if (epoch + 1) % 10 == 0:
                 logger.info("epoch", epoch=epoch + 1, loss=round(avg_loss, 6))
 
-        # Save model
+        # Save model (always on CPU for portability)
         MODEL_OUTPUT.mkdir(parents=True, exist_ok=True)
         model_path = MODEL_OUTPUT / f"model-{MODEL_VERSION}.pt"
-        torch.save(model.state_dict(), model_path)
+        torch.save(model.cpu().state_dict(), model_path)
 
-        # Export to ONNX
+        # Export to ONNX (model already on CPU)
         model.eval()
         onnx_path = MODEL_OUTPUT / f"model-{MODEL_VERSION}.onnx"
         dummy = torch.randn(1, input_dim)

@@ -1,0 +1,28 @@
+# GPU overrides for AWS deployment.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.gpu.yml up
+services:
+  training:
+    build:
+      context: .
+      dockerfile: source/services/training/Dockerfile.gpu
+      target: prod
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  inference:
+    build:
+      context: .
+      dockerfile: source/services/inference/Dockerfile.gpu
+      target: prod
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

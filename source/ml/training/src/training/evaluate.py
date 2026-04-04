@@ -22,8 +22,16 @@ MODEL_VERSION = os.getenv("MODEL_VERSION", "v1.0.0")
 THRESHOLD = float(os.getenv("ANOMALY_THRESHOLD", "0.05"))
 
 
+def _get_device() -> torch.device:
+    """Select the best available device (CUDA > CPU)."""
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    return torch.device("cpu")
+
+
 def main() -> None:
-    logger.info("evaluate_start", model_version=MODEL_VERSION)
+    device = _get_device()
+    logger.info("evaluate_start", model_version=MODEL_VERSION, device=str(device))
 
     # Load eval data
     eval_data = np.load(DATA_DIR / "eval_data.npy")
@@ -35,13 +43,14 @@ def main() -> None:
 
     model = _build_model(input_dim, int(os.getenv("LATENT_DIM", "3")))
     model.load_state_dict(torch.load(MODEL_DIR / f"model-{MODEL_VERSION}.pt", weights_only=True))
+    model.to(device)
     model.eval()
 
     # Compute anomaly scores (reconstruction error)
     with torch.no_grad():
-        x = torch.from_numpy(eval_data)
+        x = torch.from_numpy(eval_data).to(device)
         recon = model(x)
-        scores = ((x - recon) ** 2).mean(dim=1).numpy()
+        scores = ((x - recon) ** 2).mean(dim=1).cpu().numpy()
 
     # Binary predictions
     preds = (scores > THRESHOLD).astype(int)

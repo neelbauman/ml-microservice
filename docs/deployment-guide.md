@@ -234,27 +234,31 @@ kubectl get pods -n argo
 ```
 git push (main)
     │
-    ├──▶ ci.yml (自動)
+    ├──▶ ci.yml (自動: main push / PR to main, dev)
     │     ├── lint:    uv run ruff check/format
     │     ├── test:    uv run pytest (Valkey コンテナ付き)
-    │     ├── helm:    helm lint + template
+    │     ├── helm:    helm lint + template (dev/prod)
     │     └── terraform: fmt + validate
     │
-    ├──▶ build.yml (services/ libs/ ml/ 変更時)
+    ├──▶ build.yml (source/services/ source/libs/ source/ml/ 変更時)
     │     ├── detect-changes: paths-filter で変更検出
-    │     ├── build-services: 変更サービスのみ Docker → ECR
-    │     └── build-training: ml/ 変更時のみ GPU イメージ → ECR
+    │     ├── build-services: 変更サービスのみ Docker → ECR (GHA キャッシュ付き)
+    │     └── build-training-gpu: source/ml/ 変更時のみ GPU イメージ → ECR
     │
-    └──▶ deploy.yml (build 完了後 or 手動)
-          ├── kubeconfig: aws eks update-kubeconfig
-          ├── helm: helm upgrade --install -f values-${ENV}.yaml
-          └── verify: kubectl rollout status (全サービス)
+    ├──▶ deploy.yml (build 完了後 or 手動)
+    │     ├── kubeconfig: aws eks update-kubeconfig
+    │     ├── helm: helm upgrade --install -f values-${ENV}.yaml
+    │     └── verify: kubectl rollout status (全 6 サービス)
+    │
+    └──▶ security.yml (PR / main push / 週次月曜 03:00 UTC)
+          ├── dependency-audit: pip-audit で Python 依存の CVE スキャン
+          └── trivy-scan: 全 6 サービスのコンテナイメージ脆弱性スキャン (CRITICAL/HIGH)
 ```
 
 
 ### 5.2 CI パイプライン (`ci.yml`)
 
-トリガー: `main` への push / Pull Request
+トリガー: `main` への push / `main` または `dev` への Pull Request
 
 | ジョブ | 実行内容 | 失敗時の影響 |
 |--------|---------|------------|
@@ -274,23 +278,37 @@ uv のセットアップには `astral-sh/setup-uv@v4` を使用する。`enable
 
 | サービス | 再ビルドトリガー |
 |---------|-----------------|
-| ingestion | `services/ingestion/**` または `libs/common/**` |
-| preprocessing | `services/preprocessing/**` または `libs/common/**` |
-| inference | `services/inference/**` または `libs/common/**` |
-| alert | `services/alert/**` または `libs/common/**` |
-| training-svc | `services/training/**` または `ml/**` または `libs/common/**` |
-| training (GPU) | `ml/**` または `libs/common/**` |
+| ingestion | `source/services/ingestion/**` または `source/libs/common/**` |
+| preprocessing | `source/services/preprocessing/**` または `source/libs/common/**` |
+| inference | `source/services/inference/**` または `source/libs/common/**` |
+| alert | `source/services/alert/**` または `source/libs/common/**` |
+| dashboard | `source/services/dashboard/**` または `source/libs/common/**` |
+| training | `source/services/training/**` または `source/ml/training/**` または `source/libs/common/**` |
+| training-gpu | `source/ml/training/**` または `source/libs/common/**` |
 
-`libs/common` の変更は全サービスの再ビルドをトリガーする。これは共有ライブラリの変更が全サービスに影響するためである。
+`source/libs/common` の変更は全サービスの再ビルドをトリガーする。これは共有ライブラリの変更が全サービスに影響するためである。
 
 Docker ビルドの特徴:
 - ビルドコンテキストはリポジトリルート (`context: .`) — uv workspace の `pyproject.toml` と `uv.lock` にアクセスするため
 - `uv sync --frozen` により `uv.lock` の内容が厳密に再現される
 - 依存インストールとソースコピーを分離し、Docker レイヤーキャッシュを最大化
+- GitHub Actions cache (`cache-from: type=gha`) によりビルドレイヤーをジョブ間で再利用
 - ECR には `latest` と `${github.sha}` の 2 タグで push
 
 
-### 5.4 Deploy パイプライン (`deploy.yml`)
+### 5.4 Security パイプライン (`security.yml`)
+
+トリガー: `main` / `dev` への PR・push、週次月曜 03:00 UTC (スケジュール)
+
+| ジョブ | 実行内容 | 失敗時の影響 |
+|--------|---------|------------|
+| dependency-audit | `pip-audit --strict --desc` で全 Python 依存の CVE チェック | PR マージ不可 |
+| trivy-scan | 全 6 サービスの Docker イメージを Trivy でスキャン (CRITICAL/HIGH) | PR マージ不可 |
+
+Trivy の結果は SARIF 形式で GitHub Security タブに自動アップロードされる。週次スケジュールにより、新たに発見された脆弱性も定期的にキャッチできる。
+
+
+### 5.5 Deploy パイプライン (`deploy.yml`)
 
 トリガー: Build パイプライン完了後 (自動) / 手動 (workflow_dispatch)
 
@@ -301,6 +319,17 @@ helm upgrade --install ml-pipeline ./helm \
   --create-namespace \
   --set global.imageRegistry=${ECR_REGISTRY} \
   --wait --timeout 10m
+```
+
+デプロイ後の検証では全 6 サービスの rollout status を確認する:
+
+```bash
+kubectl -n ml-pipeline rollout status deployment/ingestion --timeout=300s
+kubectl -n ml-pipeline rollout status deployment/preprocessing --timeout=300s
+kubectl -n ml-pipeline rollout status deployment/inference --timeout=300s
+kubectl -n ml-pipeline rollout status deployment/alert --timeout=300s
+kubectl -n ml-pipeline rollout status deployment/dashboard --timeout=300s
+kubectl -n ml-pipeline rollout status deployment/training --timeout=300s
 ```
 
 Helm が参照する主要な設定:
@@ -321,7 +350,7 @@ Helm が参照する主要な設定:
 Dapr sidecar は Deployment の annotation (`dapr.io/enabled: "true"`) により自動注入される。`helm/templates/deployment.yaml` の Pod template に annotation が定義されている。
 
 
-### 5.5 GitHub Actions の必要シークレット
+### 5.6 GitHub Actions の必要シークレット
 
 | シークレット名 | 内容 |
 |--------------|------|
@@ -372,6 +401,12 @@ kubectl -n ml-pipeline logs -l app=ingestion -c daprd --tail=50
 # サービス疎通確認
 kubectl -n ml-pipeline port-forward svc/ingestion 8001:80
 curl http://localhost:8001/health
+
+# 全サービスの rollout status 一括確認
+for svc in ingestion preprocessing inference alert dashboard training; do
+  echo "=== $svc ==="
+  kubectl -n ml-pipeline rollout status deployment/$svc --timeout=60s
+done
 ```
 
 
@@ -594,7 +629,9 @@ aws rds modify-db-cluster \
 
 ### 11.2 デプロイ後チェックリスト
 
-- [ ] `kubectl -n ml-pipeline get pods` で全 Pod が Running
+- [ ] `kubectl -n ml-pipeline get pods` で全 Pod (ingestion, preprocessing, inference, alert, dashboard, training) が Running
 - [ ] `kubectl -n ml-pipeline logs -l app=ingestion -c daprd` でエラーなし
+- [ ] `kubectl -n ml-pipeline logs -l app=training -c daprd` でエラーなし
 - [ ] Grafana ダッシュボードでメトリクスが表示されている
 - [ ] `make seed` 相当のテストデータで E2E 動作確認
+- [ ] GitHub Security タブで Trivy / pip-audit の結果に CRITICAL/HIGH がないことを確認

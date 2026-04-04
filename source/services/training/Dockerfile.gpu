@@ -1,0 +1,76 @@
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04 AS builder
+
+# Install Python 3.12 and uv
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    software-properties-common && \
+    add-apt-repository ppa:deadsnakes/ppa && \
+    apt-get update && apt-get install -y --no-install-recommends \
+    python3.12 python3.12-venv python3.12-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=ghcr.io/astral-sh/uv:0.5 /uv /usr/local/bin/uv
+
+WORKDIR /app
+ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON=python3.12
+
+COPY pyproject.toml uv.lock ./
+COPY source/libs/common/pyproject.toml source/libs/common/pyproject.toml
+COPY source/services/ingestion/pyproject.toml source/services/ingestion/pyproject.toml
+COPY source/services/preprocessing/pyproject.toml source/services/preprocessing/pyproject.toml
+COPY source/services/inference/pyproject.toml source/services/inference/pyproject.toml
+COPY source/services/alert/pyproject.toml source/services/alert/pyproject.toml
+COPY source/services/dashboard/pyproject.toml source/services/dashboard/pyproject.toml
+COPY source/ml/training/pyproject.toml source/ml/training/pyproject.toml
+COPY source/services/training/pyproject.toml source/services/training/pyproject.toml
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --package training-svc --no-dev --no-install-workspace
+
+# Replace CPU torch with CUDA variant
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --reinstall torch --index-url https://download.pytorch.org/whl/cu124
+
+COPY source/libs/common/src/ source/libs/common/src/
+COPY source/ml/training/src/ source/ml/training/src/
+COPY source/services/training/src/ source/services/training/src/
+
+# --- dev ---
+FROM builder AS dev-builder
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --package training-svc --no-dev
+
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04 AS dev
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    software-properties-common && \
+    add-apt-repository ppa:deadsnakes/ppa && \
+    apt-get update && apt-get install -y --no-install-recommends \
+    python3.12 python3.12-venv && \
+    rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY --from=dev-builder /app/.venv /app/.venv
+COPY --from=dev-builder /app/source/libs/common/src/ /app/source/libs/common/src/
+COPY --from=dev-builder /app/source/ml/training/src/ /app/source/ml/training/src/
+COPY --from=dev-builder /app/source/services/training/src/ /app/source/services/training/src/
+ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1
+ENV NVIDIA_VISIBLE_DEVICES=all NVIDIA_DRIVER_CAPABILITIES=compute,utility
+EXPOSE 8000
+CMD ["uvicorn", "training_service.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+# --- prod ---
+FROM builder AS prod-builder
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --package training-svc --no-dev --no-editable
+
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04 AS prod
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    software-properties-common && \
+    add-apt-repository ppa:deadsnakes/ppa && \
+    apt-get update && apt-get install -y --no-install-recommends \
+    python3.12 python3.12-venv && \
+    rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY --from=prod-builder /app/.venv /app/.venv
+ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1
+ENV NVIDIA_VISIBLE_DEVICES=all NVIDIA_DRIVER_CAPABILITIES=compute,utility
+EXPOSE 8000
+CMD ["uvicorn", "training_service.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
