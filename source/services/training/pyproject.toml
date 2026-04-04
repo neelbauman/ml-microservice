@@ -1,0 +1,24 @@
+[project]
+name = "training-svc"
+version = "0.1.0"
+description = "Training workflow service — Prefect-based ML training orchestration with Dapr event triggers"
+requires-python = ">=3.12"
+dependencies = [
+    "ml-pipeline-common",
+    "ml-training",
+    "uvicorn[standard]>=0.30.0",
+    "httpx>=0.27.0",
+    "prefect>=3.0.0",
+    "prefect-aws>=0.5.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/training_service"]
+
+[tool.uv.sources]
+ml-pipeline-common = { workspace = true }
+ml-training = { workspace = true }
