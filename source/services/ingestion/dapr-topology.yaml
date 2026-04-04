@@ -1,0 +1,8 @@
+appId: ingestion
+publishes:
+  - pubsub: pubsub
+    topic: raw-data
+invokes: []
+uses:
+  - component: statestore
+    type: state

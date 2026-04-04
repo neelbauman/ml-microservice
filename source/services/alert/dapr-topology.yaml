@@ -1,0 +1,6 @@
+appId: alert
+publishes: []
+invokes: []
+uses:
+  - component: statestore
+    type: state

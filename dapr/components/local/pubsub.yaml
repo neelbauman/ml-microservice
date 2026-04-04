@@ -10,7 +10,5 @@ spec:
       value: "redpanda:9092"
     - name: authType
       value: "none"
-    - name: consumerGroup
-      value: "ml-pipeline"
     - name: maxMessageBytes
       value: "1048576"

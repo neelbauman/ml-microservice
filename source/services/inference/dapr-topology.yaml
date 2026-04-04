@@ -1,0 +1,10 @@
+appId: inference
+publishes:
+  - pubsub: pubsub
+    topic: inference-results
+  - pubsub: pubsub
+    topic: alerts
+invokes: []
+uses:
+  - component: statestore
+    type: state

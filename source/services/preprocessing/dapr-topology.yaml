@@ -1,0 +1,8 @@
+appId: preprocessing
+publishes:
+  - pubsub: pubsub
+    topic: preprocessed-data
+invokes: []
+uses:
+  - component: statestore
+    type: state
