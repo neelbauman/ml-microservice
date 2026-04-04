@@ -124,7 +124,7 @@ services:
   ingestion:
     build:
       context: .
-      dockerfile: services/ingestion/Dockerfile
+      dockerfile: source/services/ingestion/Dockerfile
       target: prod
     environment:
       <<: *dapr-env
@@ -140,7 +140,7 @@ services:
   preprocessing:
     build:
       context: .
-      dockerfile: services/preprocessing/Dockerfile
+      dockerfile: source/services/preprocessing/Dockerfile
       target: prod
     environment:
       <<: *dapr-env
@@ -155,7 +155,7 @@ services:
   inference:
     build:
       context: .
-      dockerfile: services/inference/Dockerfile
+      dockerfile: source/services/inference/Dockerfile
       target: prod
     environment:
       <<: *dapr-env
@@ -178,7 +178,7 @@ services:
   alert:
     build:
       context: .
-      dockerfile: services/alert/Dockerfile
+      dockerfile: source/services/alert/Dockerfile
       target: prod
     environment:
       <<: *dapr-env
@@ -186,6 +186,20 @@ services:
       LOG_LEVEL: INFO
     ports:
       - "8004:8000"
+    depends_on:
+      redpanda: { condition: service_healthy }
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: source/services/dashboard/Dockerfile
+      target: prod
+    environment:
+      <<: *dapr-env
+      SERVICE_NAME: dashboard
+      LOG_LEVEL: INFO
+    ports:
+      - "8005:8000"
     depends_on:
       redpanda: { condition: service_healthy }
 
@@ -243,6 +257,19 @@ services:
       - ./dapr:/config
     network_mode: "service:alert"
     depends_on: [alert, dapr-placement]
+
+  dashboard-dapr:
+    image: "daprio/daprd:1.14.1"
+    command: ["./daprd",
+      "--app-id", "dashboard", "--app-port", "8000",
+      "--dapr-http-port", "3500", "--dapr-grpc-port", "50001",
+      "--resources-path", "/components", "--config", "/config/config.yaml",
+      "--placement-host-address", "dapr-placement:50006"]
+    volumes:
+      - ./dapr/components/dashboard:/components
+      - ./dapr:/config
+    network_mode: "service:dashboard"
+    depends_on: [dashboard, dapr-placement]
 
   # ============================================================
   # Monitoring (local)

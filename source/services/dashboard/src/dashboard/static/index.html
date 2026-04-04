@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ML Pipeline Dashboard</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --border: #334155;
+      --text: #e2e8f0;
+      --text-muted: #94a3b8;
+      --accent: #3b82f6;
+      --green: #22c55e;
+      --yellow: #eab308;
+      --red: #ef4444;
+      --orange: #f97316;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 1rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    header h1 { font-size: 1.25rem; font-weight: 600; }
+    .connection-status {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+    .connection-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--red);
+    }
+    .connection-dot.connected { background: var(--green); }
+
+    .stats-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1rem;
+      padding: 1.5rem 2rem;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+    }
+    .stat-card .label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .stat-card .value { font-size: 1.75rem; font-weight: 700; margin-top: 0.25rem; }
+    .stat-card .value.anomaly { color: var(--red); }
+    .stat-card .value.normal { color: var(--green); }
+
+    .panels {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      padding: 0 2rem 2rem;
+    }
+    @media (max-width: 1024px) { .panels { grid-template-columns: 1fr; } }
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      max-height: 500px;
+    }
+    .panel-header {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--border);
+      font-weight: 600;
+      font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .panel-header .count {
+      background: var(--border);
+      color: var(--text-muted);
+      font-size: 0.7rem;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-weight: 500;
+    }
+    .panel-body {
+      overflow-y: auto;
+      flex: 1;
+      padding: 0.5rem;
+    }
+
+    .event-row {
+      padding: 0.6rem 0.75rem;
+      border-radius: 6px;
+      margin-bottom: 4px;
+      font-size: 0.8rem;
+      animation: fadeIn 0.3s ease;
+      border-left: 3px solid transparent;
+    }
+    .event-row:hover { background: rgba(255,255,255,0.03); }
+    .event-row.raw { border-left-color: var(--accent); }
+    .event-row.inference { border-left-color: var(--green); }
+    .event-row.inference.anomaly { border-left-color: var(--red); }
+    .event-row.alert-warning { border-left-color: var(--yellow); }
+    .event-row.alert-critical { border-left-color: var(--red); background: rgba(239,68,68,0.05); }
+
+    .event-row .row-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.25rem;
+    }
+    .event-row .sensor-id {
+      font-weight: 600;
+      color: var(--accent);
+    }
+    .event-row .timestamp {
+      color: var(--text-muted);
+      font-size: 0.7rem;
+    }
+    .event-row .details {
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+    .badge {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      font-weight: 600;
+    }
+    .badge.anomaly { background: rgba(239,68,68,0.15); color: var(--red); }
+    .badge.normal { background: rgba(34,197,94,0.15); color: var(--green); }
+    .badge.warning { background: rgba(234,179,8,0.15); color: var(--yellow); }
+    .badge.critical { background: rgba(239,68,68,0.2); color: var(--red); }
+
+    .alert-panel { grid-column: 1 / -1; max-height: 300px; }
+
+    .score-bar {
+      display: inline-block;
+      width: 60px; height: 6px;
+      background: var(--border);
+      border-radius: 3px;
+      vertical-align: middle;
+      overflow: hidden;
+    }
+    .score-bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.3s;
+    }
+
+    .empty-state {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 120px;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ML Pipeline Dashboard</h1>
+    <div class="connection-status">
+      <div class="connection-dot" id="connDot"></div>
+      <span id="connText">Connecting...</span>
+    </div>
+  </header>
+
+  <div class="stats-bar">
+    <div class="stat-card">
+      <div class="label">Raw Events</div>
+      <div class="value" id="statRaw">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Inferences</div>
+      <div class="value" id="statInferences">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Anomalies</div>
+      <div class="value anomaly" id="statAnomalies">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Alerts</div>
+      <div class="value" id="statAlerts">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Active Sensors</div>
+      <div class="value" id="statSensors">0</div>
+    </div>
+  </div>
+
+  <div class="panels">
+    <div class="panel">
+      <div class="panel-header">
+        Raw Sensor Data
+        <span class="count" id="rawCount">0</span>
+      </div>
+      <div class="panel-body" id="rawPanel">
+        <div class="empty-state">Waiting for data...</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        Inference Results
+        <span class="count" id="inferenceCount">0</span>
+      </div>
+      <div class="panel-body" id="inferencePanel">
+        <div class="empty-state">Waiting for results...</div>
+      </div>
+    </div>
+
+    <div class="panel alert-panel">
+      <div class="panel-header">
+        Alerts
+        <span class="count" id="alertCount">0</span>
+      </div>
+      <div class="panel-body" id="alertPanel">
+        <div class="empty-state">No alerts</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const MAX_ROWS = 100;
+
+    const state = {
+      rawCount: 0,
+      inferenceCount: 0,
+      anomalyCount: 0,
+      alertCount: 0,
+      sensors: new Set(),
+    };
+
+    function formatTime(ts) {
+      if (!ts) return '';
+      const d = new Date(ts);
+      return d.toLocaleTimeString('ja-JP', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+
+    function formatValues(values) {
+      if (!values) return '';
+      return Object.entries(values).map(([k, v]) => `${k}=${typeof v === 'number' ? v.toFixed(2) : v}`).join(', ');
+    }
+
+    function scoreColor(score) {
+      if (score > 0.85) return 'var(--red)';
+      if (score > 0.6) return 'var(--orange)';
+      if (score > 0.4) return 'var(--yellow)';
+      return 'var(--green)';
+    }
+
+    function prependRow(panelId, html, maxRows) {
+      const panel = document.getElementById(panelId);
+      const empty = panel.querySelector('.empty-state');
+      if (empty) empty.remove();
+      panel.insertAdjacentHTML('afterbegin', html);
+      while (panel.children.length > maxRows) {
+        panel.removeChild(panel.lastChild);
+      }
+    }
+
+    function renderRawData(d) {
+      const valStr = formatValues(d.values);
+      return `<div class="event-row raw">
+        <div class="row-header">
+          <span class="sensor-id">${d.sensor_id}</span>
+          <span class="timestamp">${formatTime(d.timestamp)}</span>
+        </div>
+        <div class="details">${valStr}</div>
+      </div>`;
+    }
+
+    function renderInference(d) {
+      const isAnomaly = d.is_anomaly;
+      const cls = isAnomaly ? 'inference anomaly' : 'inference';
+      const badge = isAnomaly
+        ? '<span class="badge anomaly">ANOMALY</span>'
+        : '<span class="badge normal">Normal</span>';
+      const color = scoreColor(d.prediction);
+      const pct = Math.round(d.prediction * 100);
+      return `<div class="event-row ${cls}">
+        <div class="row-header">
+          <span class="sensor-id">${d.sensor_id}</span>
+          ${badge}
+          <span class="timestamp">${formatTime(d.timestamp)}</span>
+        </div>
+        <div class="details">
+          <span>Score: ${d.prediction.toFixed(4)}</span>
+          <span class="score-bar"><span class="score-bar-fill" style="width:${pct}%;background:${color}"></span></span>
+          <span>Confidence: ${d.confidence.toFixed(2)}</span>
+          <span>Model: ${d.model_version}</span>
+        </div>
+      </div>`;
+    }
+
+    function renderAlert(d) {
+      const level = d.level || 'warning';
+      const cls = level === 'critical' ? 'alert-critical' : 'alert-warning';
+      const badge = `<span class="badge ${level}">${level.toUpperCase()}</span>`;
+      return `<div class="event-row ${cls}">
+        <div class="row-header">
+          <span class="sensor-id">${d.sensor_id}</span>
+          ${badge}
+          <span class="timestamp">${formatTime(d.timestamp)}</span>
+        </div>
+        <div class="details">${d.message || ''}</div>
+      </div>`;
+    }
+
+    function updateStats() {
+      document.getElementById('statRaw').textContent = state.rawCount;
+      document.getElementById('statInferences').textContent = state.inferenceCount;
+      document.getElementById('statAnomalies').textContent = state.anomalyCount;
+      document.getElementById('statAlerts').textContent = state.alertCount;
+      document.getElementById('statSensors').textContent = state.sensors.size;
+      document.getElementById('rawCount').textContent = state.rawCount;
+      document.getElementById('inferenceCount').textContent = state.inferenceCount;
+      document.getElementById('alertCount').textContent = state.alertCount;
+    }
+
+    // Load initial data
+    async function loadInitial() {
+      try {
+        const [rawRes, infRes, alertRes] = await Promise.all([
+          fetch('/api/raw-data?limit=50'),
+          fetch('/api/inference-results?limit=50'),
+          fetch('/api/alerts?limit=50'),
+        ]);
+        const rawData = await rawRes.json();
+        const infData = await infRes.json();
+        const alertData = await alertRes.json();
+
+        rawData.reverse().forEach(d => {
+          prependRow('rawPanel', renderRawData(d), MAX_ROWS);
+          state.rawCount++;
+          state.sensors.add(d.sensor_id);
+        });
+        infData.reverse().forEach(d => {
+          prependRow('inferencePanel', renderInference(d), MAX_ROWS);
+          state.inferenceCount++;
+          if (d.is_anomaly) state.anomalyCount++;
+          state.sensors.add(d.sensor_id);
+        });
+        alertData.reverse().forEach(d => {
+          prependRow('alertPanel', renderAlert(d), MAX_ROWS);
+          state.alertCount++;
+        });
+        updateStats();
+      } catch (e) {
+        console.error('Failed to load initial data:', e);
+      }
+    }
+
+    // SSE connection
+    function connectSSE() {
+      const dot = document.getElementById('connDot');
+      const text = document.getElementById('connText');
+      const es = new EventSource('/sse');
+
+      es.onopen = () => {
+        dot.classList.add('connected');
+        text.textContent = 'Connected';
+      };
+
+      es.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          const { type, data } = msg;
+          if (type === 'raw-data') {
+            prependRow('rawPanel', renderRawData(data), MAX_ROWS);
+            state.rawCount++;
+            state.sensors.add(data.sensor_id);
+          } else if (type === 'inference-result') {
+            prependRow('inferencePanel', renderInference(data), MAX_ROWS);
+            state.inferenceCount++;
+            if (data.is_anomaly) state.anomalyCount++;
+            state.sensors.add(data.sensor_id);
+          } else if (type === 'alert') {
+            prependRow('alertPanel', renderAlert(data), MAX_ROWS);
+            state.alertCount++;
+          }
+          updateStats();
+        } catch (e) {
+          console.error('SSE parse error:', e);
+        }
+      };
+
+      es.onerror = () => {
+        dot.classList.remove('connected');
+        text.textContent = 'Reconnecting...';
+      };
+    }
+
+    loadInitial().then(connectSSE);
+  </script>
+</body>
+</html>

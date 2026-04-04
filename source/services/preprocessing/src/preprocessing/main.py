@@ -61,4 +61,4 @@ async def process(request: Request) -> dict:
     )
 
     await logger.ainfo("processed", sensor_id=sensor.sensor_id, n_features=len(features))
-    return {"status": "ok"}
+    return {"status": "SUCCESS"}

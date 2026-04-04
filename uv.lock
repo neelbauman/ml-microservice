@@ -11,6 +11,7 @@ resolution-markers = [
 [manifest]
 members = [
     "alert-svc",
+    "dashboard-svc",
     "inference-svc",
     "ingestion-svc",
     "ml-dapr-pipeline",
@@ -767,6 +768,23 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/80/aa/1324ae3966a67788e22705d41cfcc42584bdeb72ae55e1bb76d27eb7d04b/dapr_ext_fastapi-1.17.4.tar.gz", hash = "sha256:ecf6bea3ab5be9882bd1adb59000d0a688f34bc68eeb0a196521b98c706b04f9", size = 10375, upload-time = "2026-03-25T13:38:08.294Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/24/33/d7142d0a9afdd8d19b37672de955018953afe676926f1a8888a1936c81da/dapr_ext_fastapi-1.17.4-py3-none-any.whl", hash = "sha256:528702c3d101cd02e3d1d87cd5107ba298b407240057993a4375b742ba331c67", size = 10675, upload-time = "2026-03-25T13:38:07.269Z" },
+]
+
+[[package]]
+name = "dashboard-svc"
+version = "0.1.0"
+source = { editable = "source/services/dashboard" }
+dependencies = [
+    { name = "ml-pipeline-common" },
+    { name = "sse-starlette" },
+    { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "ml-pipeline-common", editable = "source/libs/common" },
+    { name = "sse-starlette", specifier = ">=2.0.0" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.30.0" },
 ]
 
 [[package]]
@@ -3866,6 +3884,19 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/90/76/437d71068094df0726366574cf3432a4ed754217b436eb7429415cf2d480/sqlparse-0.5.5.tar.gz", hash = "sha256:e20d4a9b0b8585fdf63b10d30066c7c94c5d7a7ec47c889a2d83a3caa93ff28e", size = 120815, upload-time = "2025-12-19T07:17:45.073Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/49/4b/359f28a903c13438ef59ebeee215fb25da53066db67b305c125f1c6d2a25/sqlparse-0.5.5-py3-none-any.whl", hash = "sha256:12a08b3bf3eec877c519589833aed092e2444e68240a3577e8e26148acc7b1ba", size = 46138, upload-time = "2025-12-19T07:17:46.573Z" },
+]
+
+[[package]]
+name = "sse-starlette"
+version = "3.3.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+    { name = "starlette" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/26/8c/f9290339ef6d79badbc010f067cd769d6601ec11a57d78569c683fb4dd87/sse_starlette-3.3.4.tar.gz", hash = "sha256:aaf92fc067af8a5427192895ac028e947b484ac01edbc3caf00e7e7137c7bef1", size = 32427, upload-time = "2026-03-29T09:00:23.307Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f8/7f/3de5402f39890ac5660b86bcf5c03f9d855dad5c4ed764866d7b592b46fd/sse_starlette-3.3.4-py3-none-any.whl", hash = "sha256:84bb06e58939a8b38d8341f1bc9792f06c2b53f48c608dd207582b664fc8f3c1", size = 14330, upload-time = "2026-03-29T09:00:21.846Z" },
 ]
 
 [[package]]

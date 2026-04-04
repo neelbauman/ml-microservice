@@ -8,7 +8,7 @@ AWS_REGION       ?= ap-northeast-1
 AWS_ACCOUNT_ID   ?= $(shell aws sts get-caller-identity --query Account --output text 2>/dev/null || echo "000000000000")
 ECR_REGISTRY     ?= $(AWS_ACCOUNT_ID).dkr.ecr.$(AWS_REGION).amazonaws.com
 ENV              ?= dev
-SERVICES         := ingestion preprocessing inference alert
+SERVICES         := ingestion preprocessing inference alert dashboard
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -32,6 +32,7 @@ up: ## Start local environment
 	@echo "  Preprocessing: http://localhost:8002"
 	@echo "  Inference:     http://localhost:8003"
 	@echo "  Alert:         http://localhost:8004"
+	@echo "  Dashboard:     http://localhost:8005"
 	@echo "  MLflow:        http://localhost:5001"
 	@echo "  MinIO Console: http://localhost:9001"
 	@echo "  Prometheus:    http://localhost:9090"
@@ -61,7 +62,7 @@ test: ## Run all tests
 	uv run pytest --tb=short -q
 
 test-%: ## Test specific service (e.g. make test-ingestion)
-	uv run pytest services/$*/tests/ -v
+	uv run pytest source/services/$*/tests/ -v
 
 cov: ## Run tests with coverage
 	uv run pytest --cov --cov-report=html
@@ -79,13 +80,13 @@ lint-fix: ## Auto-fix lint
 build: ## Build all Docker images
 	@for svc in $(SERVICES); do \
 		echo "\n=== Building $$svc ==="; \
-		docker build -f services/$$svc/Dockerfile -t ml-pipeline/$$svc:latest .; \
+		docker build -f source/services/$$svc/Dockerfile -t ml-pipeline/$$svc:latest .; \
 	done
 	@echo "\n=== Building training (GPU) ==="
-	docker build -f ml/training/Dockerfile.gpu -t ml-pipeline/training:latest .
+	docker build -f source/ml/training/Dockerfile.gpu -t ml-pipeline/training:latest .
 
 build-%: ## Build specific service (e.g. make build-ingestion)
-	docker build -f services/$*/Dockerfile -t ml-pipeline/$*:latest .
+	docker build -f source/services/$*/Dockerfile -t ml-pipeline/$*:latest .
 
 ecr-login: ## Login to ECR
 	aws ecr get-login-password --region $(AWS_REGION) | \

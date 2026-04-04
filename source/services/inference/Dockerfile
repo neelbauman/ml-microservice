@@ -4,18 +4,19 @@ WORKDIR /app
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
 
 COPY pyproject.toml uv.lock ./
-COPY libs/common/pyproject.toml libs/common/pyproject.toml
-COPY services/ingestion/pyproject.toml services/ingestion/pyproject.toml
-COPY services/preprocessing/pyproject.toml services/preprocessing/pyproject.toml
-COPY services/inference/pyproject.toml services/inference/pyproject.toml
-COPY services/alert/pyproject.toml services/alert/pyproject.toml
-COPY ml/training/pyproject.toml ml/training/pyproject.toml
+COPY source/libs/common/pyproject.toml source/libs/common/pyproject.toml
+COPY source/services/ingestion/pyproject.toml source/services/ingestion/pyproject.toml
+COPY source/services/preprocessing/pyproject.toml source/services/preprocessing/pyproject.toml
+COPY source/services/inference/pyproject.toml source/services/inference/pyproject.toml
+COPY source/services/alert/pyproject.toml source/services/alert/pyproject.toml
+COPY source/services/dashboard/pyproject.toml source/services/dashboard/pyproject.toml
+COPY source/ml/training/pyproject.toml source/ml/training/pyproject.toml
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --package inference-svc --no-dev --no-install-workspace
 
-COPY libs/common/src/ libs/common/src/
-COPY services/inference/src/ services/inference/src/
+COPY source/libs/common/src/ source/libs/common/src/
+COPY source/services/inference/src/ source/services/inference/src/
 
 # --- dev: editable install ---
 FROM builder AS dev-builder
@@ -25,8 +26,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 FROM python:3.12-slim AS dev
 WORKDIR /app
 COPY --from=dev-builder /app/.venv /app/.venv
-COPY --from=dev-builder /app/libs/common/src/ /app/libs/common/src/
-COPY --from=dev-builder /app/services/inference/src/ /app/services/inference/src/
+COPY --from=dev-builder /app/source/libs/common/src/ /app/source/libs/common/src/
+COPY --from=dev-builder /app/source/services/inference/src/ /app/source/services/inference/src/
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
 EXPOSE 8000

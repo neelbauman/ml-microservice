@@ -5,26 +5,33 @@ services:
     build:
       target: dev
     volumes:
-      - ./libs/common/src:/app/libs/common/src
-      - ./services/ingestion/src:/app/services/ingestion/src
+      - ./source/libs/common/src:/app/source/libs/common/src
+      - ./source/services/ingestion/src:/app/source/services/ingestion/src
 
   preprocessing:
     build:
       target: dev
     volumes:
-      - ./libs/common/src:/app/libs/common/src
-      - ./services/preprocessing/src:/app/services/preprocessing/src
+      - ./source/libs/common/src:/app/source/libs/common/src
+      - ./source/services/preprocessing/src:/app/source/services/preprocessing/src
 
   inference:
     build:
       target: dev
     volumes:
-      - ./libs/common/src:/app/libs/common/src
-      - ./services/inference/src:/app/services/inference/src
+      - ./source/libs/common/src:/app/source/libs/common/src
+      - ./source/services/inference/src:/app/source/services/inference/src
 
   alert:
     build:
       target: dev
     volumes:
-      - ./libs/common/src:/app/libs/common/src
-      - ./services/alert/src:/app/services/alert/src
+      - ./source/libs/common/src:/app/source/libs/common/src
+      - ./source/services/alert/src:/app/source/services/alert/src
+
+  dashboard:
+    build:
+      target: dev
+    volumes:
+      - ./source/libs/common/src:/app/source/libs/common/src
+      - ./source/services/dashboard/src:/app/source/services/dashboard/src

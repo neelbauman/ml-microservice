@@ -120,10 +120,10 @@ async def model_update(request: Request) -> dict:
             input_dim=event.input_dim,
             anomaly_threshold=event.anomaly_threshold,
         )
-        return {"status": "ok", "model_version": event.model_version}
+        return {"status": "SUCCESS", "model_version": event.model_version}
     except Exception as e:
         await logger.aerror("model_load_failed", error=str(e))
-        return {"status": "error", "message": str(e)}
+        return {"status": "RETRY", "message": str(e)}
 
 
 @app.post("/predict")
@@ -189,7 +189,7 @@ async def predict(request: Request) -> dict:
         is_anomaly=is_anomaly,
         model=model_version,
     )
-    return {"status": "ok", "is_anomaly": is_anomaly}
+    return {"status": "SUCCESS", "is_anomaly": is_anomaly}
 
 
 @app.get("/results/{sensor_id}")

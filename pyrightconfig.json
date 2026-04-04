@@ -1,0 +1,12 @@
+{
+  "venvPath": ".",
+  "venv": ".venv",
+  "extraPaths": [
+    "source/libs/common/src",
+    "source/services/ingestion/src",
+    "source/services/preprocessing/src",
+    "source/services/inference/src",
+    "source/services/alert/src",
+    "source/ml/training/src"
+  ]
+}

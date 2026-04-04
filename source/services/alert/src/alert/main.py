@@ -55,7 +55,7 @@ async def handle_alert(request: Request) -> dict:
         alert.model_dump(mode="json"),
     )
 
-    return {"status": "ok", "alert_id": alert.alert_id}
+    return {"status": "SUCCESS", "alert_id": alert.alert_id}
 
 
 @app.get("/alerts/recent")

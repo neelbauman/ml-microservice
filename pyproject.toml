@@ -11,6 +11,7 @@ members = [
     "source/services/preprocessing",
     "source/services/inference",
     "source/services/alert",
+    "source/services/dashboard",
     "source/ml/training",
 ]
 
@@ -33,6 +34,3 @@ select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 
-[tool.pyright]
-venvPath = "."
-venv = ".venv"
