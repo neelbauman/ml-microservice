@@ -336,3 +336,34 @@ async def subscribe() -> list:
         {"pubsubname": "pubsub", "topic": "model-updated",     "route": "/handle-model"},
     ]
 ```
+
+
+### 8.4 外部イベント駆動のワークフロートリガー
+
+Training Service は S3/MinIO のファイル配置イベントを Kafka 経由で受信し、Prefect フローを起動する。
+
+```python
+# Training Service のサブスクリプション
+@app.get("/dapr/subscribe")
+async def subscribe() -> list:
+    return [
+        {
+            "pubsubname": "pubsub",
+            "topic": "training-data-events",    # MinIO → Redpanda → Dapr
+            "route": "/events/training-data",
+        },
+    ]
+
+@app.post("/events/training-data")
+async def handle_training_data_event(request: dict, background: BackgroundTasks) -> dict:
+    data = request.get("data", request)
+    records = data.get("Records", [])      # S3 イベント通知形式
+    for record in records:
+        s3_key = record["s3"]["object"]["key"]
+        # Prefect フローをバックグラウンドで起動
+        background.add_task(run_training_flow, s3_key)
+    return {"status": "SUCCESS"}
+```
+
+このパターンにより、データファイルの配置をトリガーとした自動学習が実現できる。
+ローカルでは MinIO Bucket Notification → Redpanda、本番では S3 → EventBridge → MSK が使われる。

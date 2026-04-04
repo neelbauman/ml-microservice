@@ -12,6 +12,7 @@ members = [
     "source/services/inference",
     "source/services/alert",
     "source/services/dashboard",
+    "source/services/training",
     "source/ml/training",
 ]
 

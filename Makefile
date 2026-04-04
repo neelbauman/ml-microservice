@@ -33,7 +33,9 @@ up: ## Start local environment
 	@echo "  Inference:     http://localhost:8003"
 	@echo "  Alert:         http://localhost:8004"
 	@echo "  Dashboard:     http://localhost:8005"
+	@echo "  Training:      http://localhost:8006"
 	@echo "  MLflow:        http://localhost:5001"
+	@echo "  Prefect:       http://localhost:4200"
 	@echo "  MinIO Console: http://localhost:9001"
 	@echo "  Prometheus:    http://localhost:9090"
 	@echo "  Grafana:       http://localhost:3000  (admin/admin)"
@@ -127,6 +129,7 @@ create-topics: ## Create Kafka topics
 	docker compose exec redpanda rpk topic create inference-results --partitions 3
 	docker compose exec redpanda rpk topic create alerts --partitions 1
 	docker compose exec redpanda rpk topic create model-updates --partitions 1
+	docker compose exec redpanda rpk topic create training-data-events --partitions 1
 	@docker compose exec redpanda rpk topic list
 
 clean: ## Remove all local volumes
@@ -149,12 +152,34 @@ train-register: ## Register model to MLflow
 train-all: train-preprocess train train-evaluate train-register ## Run full training pipeline
 	@echo "Training pipeline complete."
 
+# --- Training Workflow Service ---
+run-training: ## Run training workflow service locally (outside Docker, with hot reload)
+	PREFECT_API_URL=http://localhost:4200/api \
+	uv run --package training-svc uvicorn training_service.main:app --host 0.0.0.0 --port 8006 --reload
+
+train-trigger: ## Trigger training pipeline via the workflow service
+	curl -s -X POST http://localhost:8006/trigger/full | python -m json.tool
+
+train-trigger-s3: ## Trigger retraining with S3 data path (S3_PATH=training/2024-01/)
+	curl -s -X POST http://localhost:8006/trigger \
+		-H "Content-Type: application/json" \
+		-d '{"source":"manual","s3_key":"$(S3_PATH)"}' | python -m json.tool
+
 # --- Developer Tools ---
 seed: ## Send sample data through the pipeline
 	uv run python scripts/seed_data.py
 
 seed-continuous: ## Continuous data stream (1/sec)
 	uv run python scripts/seed_data.py --continuous
+
+seed-training: ## Generate training data and upload to MinIO (triggers auto-training)
+	uv run python scripts/seed_training_data.py
+
+seed-training-small: ## Generate small training data for quick testing
+	uv run python scripts/seed_training_data.py --normal 1000 --anomaly 50
+
+seed-training-local: ## Generate training data to /tmp/ml-data (no upload)
+	uv run python scripts/seed_training_data.py --local-only
 
 health: ## Check health of all services + Dapr
 	uv run python scripts/health_check.py

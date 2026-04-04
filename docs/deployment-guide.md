@@ -1,7 +1,7 @@
 # ML Pipeline with Dapr — デプロイガイド
 
 > 対象読者: インフラ担当者、SRE、デプロイ権限を持つエンジニア
-> 最終更新: 2025-04
+> 最終更新: 2026-04
 
 ---
 
@@ -39,7 +39,7 @@ Internet
 │  │  │  Dapr, ArgoCD, OTel Collector           │        │   │
 │  │  └─────────────────────────────────────────┘        │   │
 │  │  ┌─ App Nodes ─────────────────────────────┐        │   │
-│  │  │  FastAPI services, MLflow, Feast         │        │   │
+│  │  │  FastAPI services, MLflow, Prefect, Feast│        │   │
 │  │  └─────────────────────────────────────────┘        │   │
 │  │  ┌─ GPU Nodes (g5.xlarge) ─────────────────┐        │   │
 │  │  │  Training Jobs, Triton Inference         │        │   │
@@ -278,7 +278,8 @@ uv のセットアップには `astral-sh/setup-uv@v4` を使用する。`enable
 | preprocessing | `services/preprocessing/**` または `libs/common/**` |
 | inference | `services/inference/**` または `libs/common/**` |
 | alert | `services/alert/**` または `libs/common/**` |
-| training | `ml/**` または `libs/common/**` |
+| training-svc | `services/training/**` または `ml/**` または `libs/common/**` |
+| training (GPU) | `ml/**` または `libs/common/**` |
 
 `libs/common` の変更は全サービスの再ビルドをトリガーする。これは共有ライブラリの変更が全サービスに影響するためである。
 
@@ -378,7 +379,40 @@ curl http://localhost:8001/health
 
 ## 7. ML 学習パイプライン
 
-### 7.1 学習ジョブの投入
+本番では 2 つの方法で学習パイプラインを実行できる。
+
+### 7.1 Training Workflow Service (Prefect — 推奨)
+
+Training Service は EKS の App ノードに常駐し、S3 イベントで自動トリガーされる。
+
+**S3 イベントによる自動トリガー (本番)**:
+```
+S3 PutObject (.npy/.csv/.parquet)
+  → EventBridge → MSK (training-data-events topic)
+  → Dapr subscription → Training Service
+  → Prefect Flow: preprocess → validate → train → evaluate → register
+  → model-updates topic → Inference Service ホットスワップ
+```
+
+**手動トリガー**:
+```bash
+# Training Service API 経由
+kubectl -n ml-pipeline port-forward svc/training 8006:80
+curl -X POST http://localhost:8006/trigger/full
+curl -X POST http://localhost:8006/trigger \
+  -H "Content-Type: application/json" \
+  -d '{"source": "manual", "s3_key": "training/2024-01/", "model_version": "v2.0.0"}'
+```
+
+**Prefect UI**:
+```bash
+kubectl -n ml-pipeline port-forward svc/prefect-server 4200:4200
+open http://localhost:4200
+```
+
+### 7.2 Argo Workflows (GPU ジョブ)
+
+GPU を使った大規模学習には引き続き Argo Workflows を利用可能:
 
 ```bash
 argo submit ml/training/argo-workflow.yaml \
@@ -388,29 +422,34 @@ argo submit ml/training/argo-workflow.yaml \
   -n ml-pipeline
 ```
 
-### 7.2 DAG 構成
+### 7.3 DAG 構成
 
 | ステップ | 処理内容 | リソース | 依存 |
 |---------|---------|---------|------|
 | preprocess | データ前処理 | CPU:2, Mem:4Gi | なし |
-| train | PyTorch 学習 | CPU:4, Mem:16Gi, GPU:1 | preprocess |
+| validate | データ品質チェック | CPU:1, Mem:2Gi | preprocess |
+| train | PyTorch 学習 | CPU:4, Mem:16Gi, GPU:1 | validate |
 | evaluate | モデル評価 + MLflow 記録 | CPU:2, Mem:8Gi | train |
 | register | Model Registry 登録 | CPU:1, Mem:2Gi | evaluate |
 
 train ステップは `nodeSelector: {role: gpu}` と GPU toleration により g5 ノードに配置される。
 
-### 7.3 学習ジョブの監視
+### 7.4 学習ジョブの監視
 
 ```bash
-# ジョブ一覧
+# Argo ジョブ一覧
 argo list -n ml-pipeline
 
-# ジョブログ
+# Argo ジョブログ
 argo logs -n ml-pipeline ml-training-xxxxx
 
 # MLflow UI (ポートフォワード)
 kubectl -n ml-pipeline port-forward svc/mlflow 5001:5000
 open http://localhost:5001
+
+# Prefect UI (ポートフォワード)
+kubectl -n ml-pipeline port-forward svc/prefect-server 4200:4200
+open http://localhost:4200
 ```
 
 
