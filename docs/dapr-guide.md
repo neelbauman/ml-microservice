@@ -34,12 +34,12 @@ Dapr (Distributed Application Runtime) は、マイクロサービスの「イ�
 
 ### 1.2 本プロジェクトで使用するビルディングブロック
 
-| ビルディングブロック | 用途 | コンポーネント名 | ローカル実装 | AWS 実装 |
-|-------------------|------|---------------|-----------|---------|
-| **Pub/Sub** | イベント駆動メッセージング | `pubsub` | Redpanda (Kafka) | Amazon MSK |
-| **State Store** | 状態の保存・取得 | `statestore` | Valkey (Redis) | ElastiCache |
-| **Bindings** | 外部システム連携 | `model-store` | MinIO (S3) | Amazon S3 |
-| **Service Invocation** | サービス間 RPC | (組み込み) | ─ | ─ |
+| ビルディングブロック   | 用途                       | コンポーネント名 | ローカル実装     | AWS 実装    |
+|------------------------|----------------------------|------------------|------------------|-------------|
+| **Pub/Sub**            | イベント駆動メッセージング | `pubsub`         | Redpanda (Kafka) | Amazon MSK  |
+| **State Store**        | 状態の保存・取得           | `statestore`     | Valkey (Redis)   | ElastiCache |
+| **Bindings**           | 外部システム連携           | `model-store`    | MinIO (S3)       | Amazon S3   |
+| **Service Invocation** | サービス間 RPC             | (組み込み)       | ─                | ─           |
 
 環境によらず、アプリケーションコードはコンポーネント名（`pubsub`, `statestore` 等）だけを参照します。
 
@@ -76,12 +76,13 @@ Kubernetes 上では、Pod の annotation (`dapr.io/enabled: "true"`) により 
 
 ### 2.1 関数一覧
 
-| 関数 | 用途 | Dapr API |
-|------|------|----------|
-| `publish(topic, data)` | Pub/Sub にメッセージ送信 | `POST /v1.0/publish/{pubsub}/{topic}` |
-| `save_state(key, value)` | State Store に保存 | `POST /v1.0/state/{store}` |
-| `get_state(key)` | State Store から取得 | `GET /v1.0/state/{store}/{key}` |
-| `invoke_service(app_id, method, data)` | 別サービスを呼び出し | `POST /v1.0/invoke/{app_id}/method/{method}` |
+| 関数                                   | 用途                     | Dapr API                              |
+|----------------------------------------|--------------------------|---------------------------------------|
+| `publish(topic, data)`                 | Pub/Sub にメッセージ送信 | `POST /v1.0/publish/{pubsub}/{topic}` |
+| `save_state(key, value)`               | State Store に保存       | `POST /v1.0/state/{store}`            |
+| `get_state(key)`                       | State Store から取得     | `GET /v1.0/state/{store}/{key}`       |
+| `invoke_service(app_id, method, data)` | 別サービスの呼び出し     | `POST /v1.0/invoke/{app_id}/method/{method}` |
+
 
 ### 2.2 Dapr ポートの解決
 
@@ -108,7 +109,7 @@ Docker Compose と Kubernetes の両方で `DAPR_HTTP_PORT=3500` が設定され
 ```
 Ingestion ──publish──▶ [raw-data] ──subscribe──▶ Preprocessing
                                                       │
-                                              publish  │
+                                             publish  │
                                                       ▼
                                              [preprocessed-data]
                                                       │
@@ -116,7 +117,7 @@ Ingestion ──publish──▶ [raw-data] ──subscribe──▶ Preprocessi
                                                       ▼
                                                  Inference
                                                   │      │
-                                           publish │      │ publish (異常時のみ)
+                                         publish  │      │  publish (異常時のみ)
                                                   ▼      ▼
                                       [inference-results] [alerts]
                                                           │
@@ -127,14 +128,14 @@ Ingestion ──publish──▶ [raw-data] ──subscribe──▶ Preprocessi
 
 **トピック一覧**:
 
-| トピック名 | 発行者 | 購読者 | ペイロード |
-|-----------|--------|--------|-----------|
-| `raw-data` | Ingestion | Preprocessing | `SensorData` |
-| `preprocessed-data` | Preprocessing | Inference | `ProcessedData` |
-| `inference-results` | Inference | (Dashboard等) | `InferenceResult` |
-| `alerts` | Inference | Alert | `Alert` |
-| `model-updates` | Training (register) | Inference | `ModelUpdateEvent` |
-| `training-data-events` | MinIO/S3 通知 | Training | S3 Event Notification |
+| トピック名             | 発行者              | 購読者        | ペイロード            |
+|------------------------|---------------------|---------------|-----------------------|
+| `raw-data`             | Ingestion           | Preprocessing | `SensorData`          |
+| `preprocessed-data`    | Preprocessing       | Inference     | `ProcessedData`       |
+| `inference-results`    | Inference           | (Dashboard等) | `InferenceResult`     |
+| `alerts`               | Inference           | Alert         | `Alert`               |
+| `model-updates`        | Training (register) | Inference     | `ModelUpdateEvent`    |
+| `training-data-events` | MinIO/S3 通知       | Training      | S3 Event Notification |
 
 
 ### 3.2 メッセージを送信する (publish)
@@ -210,11 +211,11 @@ async def process(request: Request) -> dict:
 
 #### レスポンスによる配送制御
 
-| レスポンス | Dapr の動作 |
-|-----------|------------|
-| `{"status": "SUCCESS"}` または HTTP 200 | **ACK** — メッセージを処理完了としてマーク |
-| `{"status": "RETRY"}` または HTTP 5xx | **RETRY** — 一定時間後にリトライ |
-| `{"status": "DROP"}` | **DROP** — メッセージを破棄（リトライしない） |
+| レスポンス                              | Dapr の動作                                   |
+|-----------------------------------------|-----------------------------------------------|
+| `{"status": "SUCCESS"}` または HTTP 200 | **ACK** — メッセージを処理完了としてマーク    |
+| `{"status": "RETRY"}` または HTTP 5xx   | **RETRY** — 一定時間後にリトライ              |
+| `{"status": "DROP"}`                    | **DROP** — メッセージを破棄（リトライしない） |
 
 #### CloudEvents エンベロープの構造
 
