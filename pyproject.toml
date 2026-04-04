@@ -6,12 +6,12 @@ requires-python = ">=3.12"
 
 [tool.uv.workspace]
 members = [
-    "libs/common",
-    "services/ingestion",
-    "services/preprocessing",
-    "services/inference",
-    "services/alert",
-    "ml/training",
+    "source/libs/common",
+    "source/services/ingestion",
+    "source/services/preprocessing",
+    "source/services/inference",
+    "source/services/alert",
+    "source/ml/training",
 ]
 
 [dependency-groups]
@@ -20,7 +20,6 @@ dev = [
     "pytest-asyncio>=0.24.0",
     "pytest-cov>=5.0.0",
     "ruff>=0.8.0",
-    "httpx>=0.27.0",
     "rich>=13.9.0",
 ]
 

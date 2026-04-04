@@ -143,7 +143,7 @@ wheels = [
 [[package]]
 name = "alert-svc"
 version = "0.1.0"
-source = { editable = "services/alert" }
+source = { editable = "source/services/alert" }
 dependencies = [
     { name = "ml-pipeline-common" },
     { name = "uvicorn", extra = ["standard"] },
@@ -151,7 +151,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "ml-pipeline-common", editable = "libs/common" },
+    { name = "ml-pipeline-common", editable = "source/libs/common" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30.0" },
 ]
 
@@ -1493,7 +1493,7 @@ wheels = [
 [[package]]
 name = "inference-svc"
 version = "0.1.0"
-source = { editable = "services/inference" }
+source = { editable = "source/services/inference" }
 dependencies = [
     { name = "boto3" },
     { name = "ml-pipeline-common" },
@@ -1507,7 +1507,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "boto3", specifier = ">=1.35.0" },
-    { name = "ml-pipeline-common", editable = "libs/common" },
+    { name = "ml-pipeline-common", editable = "source/libs/common" },
     { name = "mlflow", specifier = ">=2.16.0" },
     { name = "numpy", specifier = ">=2.1.0" },
     { name = "onnxruntime", specifier = ">=1.19.0" },
@@ -1518,7 +1518,7 @@ requires-dist = [
 [[package]]
 name = "ingestion-svc"
 version = "0.1.0"
-source = { editable = "services/ingestion" }
+source = { editable = "source/services/ingestion" }
 dependencies = [
     { name = "httpx" },
     { name = "ml-pipeline-common" },
@@ -1528,7 +1528,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "httpx", specifier = ">=0.27.0" },
-    { name = "ml-pipeline-common", editable = "libs/common" },
+    { name = "ml-pipeline-common", editable = "source/libs/common" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30.0" },
 ]
 
@@ -1919,7 +1919,6 @@ source = { virtual = "." }
 
 [package.dev-dependencies]
 dev = [
-    { name = "httpx" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
@@ -1931,7 +1930,6 @@ dev = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "httpx", specifier = ">=0.27.0" },
     { name = "pytest", specifier = ">=8.3.0" },
     { name = "pytest-asyncio", specifier = ">=0.24.0" },
     { name = "pytest-cov", specifier = ">=5.0.0" },
@@ -1978,7 +1976,7 @@ wheels = [
 [[package]]
 name = "ml-pipeline-common"
 version = "0.1.0"
-source = { editable = "libs/common" }
+source = { editable = "source/libs/common" }
 dependencies = [
     { name = "dapr" },
     { name = "dapr-ext-fastapi" },
@@ -2007,7 +2005,7 @@ requires-dist = [
 [[package]]
 name = "ml-training"
 version = "0.1.0"
-source = { editable = "ml/training" }
+source = { editable = "source/ml/training" }
 dependencies = [
     { name = "boto3" },
     { name = "feast", extra = ["redis"] },
@@ -2024,7 +2022,7 @@ dependencies = [
 requires-dist = [
     { name = "boto3", specifier = ">=1.35.0" },
     { name = "feast", extras = ["redis"], specifier = ">=0.40.0" },
-    { name = "ml-pipeline-common", editable = "libs/common" },
+    { name = "ml-pipeline-common", editable = "source/libs/common" },
     { name = "mlflow", specifier = ">=2.16.0" },
     { name = "onnx", specifier = ">=1.16.0" },
     { name = "onnxruntime", specifier = ">=1.19.0" },
@@ -2933,7 +2931,7 @@ wheels = [
 [[package]]
 name = "preprocessing-svc"
 version = "0.1.0"
-source = { editable = "services/preprocessing" }
+source = { editable = "source/services/preprocessing" }
 dependencies = [
     { name = "ml-pipeline-common" },
     { name = "numpy" },
@@ -2943,7 +2941,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "ml-pipeline-common", editable = "libs/common" },
+    { name = "ml-pipeline-common", editable = "source/libs/common" },
     { name = "numpy", specifier = ">=2.1.0" },
     { name = "pandas", specifier = ">=2.2.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30.0" },
