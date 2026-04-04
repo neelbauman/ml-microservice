@@ -11,8 +11,14 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  オフライン: 学習パイプライン                                   │
-│  preprocess → train → evaluate → register → MLflow              │
+│  オフライン: 学習ワークフロー (Training Service + Prefect)       │
+│                                                                 │
+│  [S3/MinIO ファイル配置] ──▶ [training-data-events] ──▶ Training │
+│  [手動 POST /trigger]    ──▶                            Service │
+│  [スケジュール]          ──▶                              │     │
+│                                                           ▼     │
+│            Prefect Flow: preprocess → validate → train           │
+│                          → evaluate → register → MLflow          │
 └─────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────┐
@@ -44,6 +50,8 @@
 | Preprocessing | 8002   | 正規化・特徴量抽出、`preprocessed-data` へ publish |
 | Inference     | 8003   | 異常スコア算出、閾値超過時に `alerts` へ publish   |
 | Alert         | 8004   | アラート記録・通知                                 |
+| Dashboard     | 8005   | リアルタイム UI (SSE)                              |
+| Training      | 8006   | 学習ワークフロー (Prefect + Dapr トリガー)        |
 
 ### インフラ一覧
 
@@ -54,6 +62,7 @@
 | PostgreSQL     | 5432                  | MLflow バックエンドDB                      |
 | MinIO          | 9000 / 9001 (Console) | S3 互換オブジェクトストレージ              |
 | MLflow         | 5001                  | 実験追跡・モデルレジストリ                 |
+| Prefect Server | 4200                  | ワークフロー管理 UI・API                   |
 | Prometheus     | 9090                  | メトリクス収集                             |
 | Grafana        | 3000                  | ダッシュボード (初期ログイン: admin/admin) |
 
@@ -272,45 +281,114 @@ make demo           # 起動 → 15 秒待機 → 20 件投入 → モニター�
 ### 4.1 学習パイプラインの全体フロー
 
 ```
-preprocess → train → evaluate → register → 推論サービスへ自動デプロイ
-    │           │         │          │              │
-    │           │         │          │              └─ Dapr pub/sub で通知
-    │           │         │          └─ MLflow Model Registry に登録
-    │           │         └─ AUC-ROC, F1 等を計算・記録
-    │           └─ Autoencoder を学習、MLflow に記録
-    └─ 合成学習データを生成 (.npy)
+preprocess → validate → train → evaluate → register → 推論サービスへ自動デプロイ
+    │            │         │         │          │              │
+    │            │         │         │          │              └─ Dapr pub/sub で通知
+    │            │         │         │          └─ MLflow Model Registry に登録
+    │            │         │         └─ AUC-ROC, F1 等を計算・記録
+    │            │         └─ Autoencoder を学習、MLflow に記録
+    │            └─ データ品質チェック (NaN/Inf, 最小サンプル数)
+    └─ 合成学習データ生成 / S3 からダウンロード
 ```
 
 `register` ステップの完了時、Dapr pub/sub (`model-updates` トピック) を通じて推論サービスに自動通知される。推論サービスは MLflow から ONNX モデルをダウンロードし、onnxruntime でホットスワップする。
 
-### 4.2 ローカルでの実行
+### 4.2 学習の実行方法
 
-前提条件:
-- 環境が起動済み (`make up`) であること。MLflow (`localhost:5001`)、MinIO (`localhost:9000`) が利用可能であること。
-- `.env` が配置済みであること (MinIO / MLflow への認証情報が Makefile 経由で読み込まれる)
+学習パイプラインには **3 つの実行方法** がある。
 
-#### ステップごとの実行
+#### 方法 A: Makefile で手動実行 (従来方式)
 
 ```bash
 make train-preprocess   # Step 1: 学習データ生成 (合成データ)
 make train              # Step 2: モデル学習 (Autoencoder)
 make train-evaluate     # Step 3: 評価 (AUC-ROC, F1 等)
 make train-register     # Step 4: MLflow に登録 + 推論サービスへ自動デプロイ
+
+make train-all          # 上記 4 ステップを一括実行
 ```
 
-#### 全ステップ一括実行
+#### 方法 B: Training Workflow Service 経由 (Prefect)
+
+Training Service は Prefect ベースのワークフローサービスで、イベント駆動で学習パイプラインを実行する。
 
 ```bash
-make train-all          # preprocess → train → evaluate → register を順に実行
+# 手動トリガー (フルパイプライン)
+make train-trigger
+# → POST http://localhost:8006/trigger/full
+
+# S3/MinIO 上のデータを指定して再学習
+make train-trigger-s3 S3_PATH=training/2024-01/
+# → POST http://localhost:8006/trigger with s3_key
+
+# curl で直接トリガー
+curl -X POST http://localhost:8006/trigger \
+  -H "Content-Type: application/json" \
+  -d '{"source": "manual", "model_version": "v2.0.0"}'
 ```
 
-### 4.3 ハイパーパラメータの調整
+#### 方法 C: ファイル配置による自動トリガー
+
+MinIO (ローカル) / S3 (AWS) にデータファイルを配置すると、自動的に学習パイプラインが起動する。
+
+```
+[ローカル]
+MinIO にファイルアップロード (.npy/.csv/.parquet)
+  → MinIO Bucket Notification → Redpanda (training-data-events topic)
+  → Dapr subscription → Training Service
+  → Prefect Flow 自動起動
+
+[AWS]
+S3 PutObject → EventBridge → MSK (training-data-events topic)
+  → Dapr subscription → Training Service
+  → Prefect Flow 自動起動
+```
+
+MinIO Console (`http://localhost:9001`) で `ml-data` バケットにファイルをアップロードするか、`mc` コマンドでアップロードする:
+
+```bash
+# mc (MinIO Client) でアップロード
+mc alias set local http://localhost:9000 minioadmin minioadmin
+mc cp train_data.npy local/ml-data/training/
+# → training-data-events トピックにイベントが発行され、学習が自動開始
+```
+
+### 4.3 Training Workflow Service の管理
+
+#### Prefect UI
+
+http://localhost:4200 で Prefect ダッシュボードにアクセスできる。
+
+- **Flow Runs** タブ: 実行中・完了済み・失敗したフローの一覧
+- 各フローランのタスク実行状況、ログ、所要時間を確認可能
+- 失敗したフローの詳細なエラーログとリトライ操作
+
+#### サービスの起動
+
+```bash
+# Docker Compose で起動 (make up に含まれる)
+make up
+
+# ホスト側で直接起動 (ホットリロード)
+make run-training
+```
+
+#### トリガー API
+
+| エンドポイント | メソッド | 説明 |
+|--------------|---------|------|
+| `/trigger` | POST | `TrainingTriggerEvent` を送信してトリガー |
+| `/trigger/full` | POST | フルパイプラインを即座にトリガー |
+| `/events/training-data` | POST | Dapr pub/sub 経由の S3 イベント受信 (自動) |
+| `/health` | GET | ヘルスチェック |
+
+### 4.4 ハイパーパラメータの調整
 
 環境変数で制御可能:
 
 | 環境変数 | デフォルト | 説明 |
 |---------|-----------|------|
-| `NUM_NORMAL_SAMPLES` | 5000 | 正常データの生成件数 |
+| `NUM_NORMAL_SAMPLES` | 100000 | 正常データの生成件数 |
 | `NUM_ANOMALY_SAMPLES` | 200 | 異常データの生成件数 |
 | `NUM_FEATURES` | 8 | 特徴量の次元数 |
 | `EPOCHS` | 50 | 学習エポック数 |
@@ -323,11 +401,14 @@ make train-all          # preprocess → train → evaluate → register を順�
 使用例:
 
 ```bash
+# Makefile 経由
 EPOCHS=100 BATCH_SIZE=128 LEARNING_RATE=0.0005 MODEL_VERSION=v2.0.0 \
   make train
+
+# Training Service 経由 (環境変数は docker-compose.yml で設定)
 ```
 
-### 4.4 学習結果の確認
+### 4.5 学習結果の確認
 
 MLflow UI: http://localhost:5001
 
@@ -336,9 +417,16 @@ MLflow UI: http://localhost:5001
 - 評価ラン (`eval-*`) に AUC-ROC, Precision, Recall, F1 が記録される
 - 登録ラン (`register-*`) で ONNX モデルがアーティファクトとして保存される
 
-### 4.5 本番環境での学習 (Argo Workflows)
+Prefect UI: http://localhost:4200
 
-本番では `ml/training/argo-workflow.yaml` を Argo Workflows で実行する:
+- **Flow Runs** タブ: ワークフロー実行履歴
+- 各タスク (preprocess, validate, train, evaluate, register) の成功/失敗と所要時間
+
+### 4.6 本番環境での学習
+
+本番では Training Service が EKS 上で常駐し、S3 イベント → MSK → Dapr で自動トリガーされる。
+
+Argo Workflows による手動実行も引き続き利用可能:
 
 ```bash
 argo submit ml/training/argo-workflow.yaml \
@@ -368,6 +456,7 @@ make logs-inference      # 例: inference のログ
 | Grafana | http://localhost:3000 | メトリクスダッシュボード |
 | Prometheus | http://localhost:9090 | メトリクスクエリ |
 | MLflow | http://localhost:5001 | 学習実験・モデル管理 |
+| Prefect | http://localhost:4200 | 学習ワークフロー管理 |
 | MinIO Console | http://localhost:9001 | オブジェクトストレージ (minioadmin/minioadmin) |
 | Redpanda Console | http://localhost:19644 | ブローカーステータス |
 
@@ -385,6 +474,7 @@ docker compose exec redpanda rpk topic consume raw-data --num 5
 docker compose exec redpanda rpk topic consume preprocessed-data --num 5
 docker compose exec redpanda rpk topic consume inference-results --num 5
 docker compose exec redpanda rpk topic consume alerts --num 5
+docker compose exec redpanda rpk topic consume training-data-events --num 5
 ```
 
 ### 5.4 ステートストアの確認
@@ -417,6 +507,9 @@ docker compose exec valkey valkey-cli
 | `model_load_failed` (推論) | inference → MLflow 接続失敗 | `docker compose logs inference` で詳細確認。MLflow が起動しているか `make health` で確認 |
 | `model_update_publish_failed` | register.py → Dapr sidecar 接続失敗 | `make up` でサービスが起動しているか確認。`.env` の `DAPR_HTTP_PORT=3501` を確認 |
 | コンテナの状態がおかしい | ボリュームの不整合 | `make clean && make up` で完全リセット |
+| ファイル配置しても学習が始まらない | MinIO Bucket Notification 未設定 | `docker compose logs minio-notify-init` で設定ログ確認。`make clean && make up` で再設定 |
+| Prefect UI にフローが表示されない | Prefect Server 未起動 | `docker compose logs prefect-server` で確認。`PREFECT_API_URL` が正しいか確認 |
+| 学習トリガー後にフローが失敗 | MLflow/MinIO 接続エラー | `docker compose logs training` でエラー確認。`make health` でインフラ状態確認 |
 
 ---
 
@@ -452,6 +545,9 @@ docker compose exec valkey valkey-cli
 | `make train-evaluate` | モデル評価 |
 | `make train-register` | MLflow に登録 + 推論サービスへ自動デプロイ |
 | `make train-all` | 上記 4 ステップを一括実行 |
+| `make run-training` | 学習ワークフローサービスをホットリロード起動 |
+| `make train-trigger` | ワークフローサービス経由で学習トリガー |
+| `make train-trigger-s3` | S3 パス指定で再学習トリガー (`S3_PATH=...`) |
 
 ### 開発・運用
 

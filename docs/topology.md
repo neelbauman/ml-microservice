@@ -7,6 +7,7 @@ graph LR
     inference["inference"]
     ingestion["ingestion"]
     preprocessing["preprocessing"]
+    training["training<br/>(Prefect)"]
 
     alert -->|"use"| statestore
     inference -->|"publish: inference-results"| pubsub
@@ -16,6 +17,7 @@ graph LR
     ingestion -->|"use"| statestore
     preprocessing -->|"publish: preprocessed-data"| pubsub
     preprocessing -->|"use"| statestore
+    training -->|"publish: model-updates"| pubsub
     pubsub -->|"subscribe: alerts"| alert
     pubsub -->|"subscribe: alerts"| dashboard
     pubsub -->|"subscribe: inference-results"| dashboard
@@ -23,3 +25,4 @@ graph LR
     pubsub -->|"subscribe: model-updates"| inference
     pubsub -->|"subscribe: preprocessed-data"| inference
     pubsub -->|"subscribe: raw-data"| preprocessing
+    pubsub -->|"subscribe: training-data-events"| training

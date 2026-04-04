@@ -1,7 +1,7 @@
 # ML Pipeline with Dapr — 開発ガイド
 
 > 対象読者: 本プロジェクトで開発を行うエンジニア
-> 最終更新: 2025-04
+> 最終更新: 2026-04
 
 ---
 
@@ -53,8 +53,9 @@ ml-dapr-pipeline/
 ├── services/
 │   ├── ingestion/           ← ingestion-svc
 │   ├── preprocessing/       ← preprocessing-svc
-│   ├── inference/           ← inference-svc
-│   └── alert/               ← alert-svc
+���   ├── inference/           ← inference-svc
+│   ├── alert/               ← alert-svc
+│   └── training/            ← training-svc (Prefect ワークフロー)
 │
 ├── ml/training/             ← ml-training (GPU 学習ジョブ)
 │
@@ -80,10 +81,11 @@ ml-pipeline-common (libs/common)
     ├──▶ preprocessing-svc  + numpy, pandas
     ├──▶ inference-svc      + onnxruntime, tritonclient
     ├──▶ alert-svc          (common のみ)
-    └──▶ ml-training        + torch, mlflow, feast
+    ├──▶ ml-training        + torch, mlflow, feast
+    └──�� training-svc       + ml-training, prefect, prefect-aws
 ```
 
-全メンバーが `ml-pipeline-common` に依存しており、Dapr 操作・ログ設定・データモデルを共有する。開発ツール (pytest, ruff, httpx) はルート `pyproject.toml` に一元定義されている。
+全メンバーが `ml-pipeline-common` ��依存しており、Dapr 操作・ログ設定・データモデルを共有する。`training-svc` は `ml-training` にも依存し、既存の学習ロジックを Prefect タスクとして再利用する。開発ツール (pytest, ruff, httpx) はルート `pyproject.toml` に一元定義されている。
 
 
 ### 3.3 データモデル
@@ -96,6 +98,8 @@ ml-pipeline-common (libs/common)
 | `ProcessedData` | 正規化済みデータ | sensor_id, features (list[float]), feature_names |
 | `InferenceResult` | 推論結果 | prediction, confidence, is_anomaly, model_version |
 | `Alert` | 異常アラート | alert_id, level (INFO/WARNING/CRITICAL), message |
+| `ModelUpdateEvent` | モデル更新通知 | model_name, model_version, model_uri, run_id |
+| `TrainingTriggerEvent` | 学習トリガー | source (s3_event/manual/schedule), s3_bucket, s3_key |
 
 
 ---
@@ -137,6 +141,9 @@ make up
 | preprocessing + sidecar | 前処理 | 8002 | |
 | inference + sidecar | 推論 | 8003 | |
 | alert + sidecar | アラート | 8004 | |
+| dashboard + sidecar | リアルタイムUI | 8005 | |
+| training + sidecar | 学習ワークフロー | 8006 | Prefect フロー実行 |
+| prefect-server | ワークフロー管理UI | 4200 | Prefect ダッシュボード |
 
 
 ### 4.3 起動確認
@@ -427,6 +434,9 @@ docker compose exec valkey valkey-cli
 | `make build` / `make build-{svc}` | Docker イメージビルド |
 | `make create-topics` | Kafka トピック作成 |
 | `make clean` | 全ボリューム削除 |
+| `make run-training` | 学習ワークフローサービスをホットリロード起動 |
+| `make train-trigger` | ワークフローサービス経由で学習パイプラインをトリガー |
+| `make train-trigger-s3` | S3 パス指定で再学習トリガー |
 
 
 ---
