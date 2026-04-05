@@ -45,6 +45,13 @@ def evaluate_model(
     eval_labels = np.load(data_path / "eval_labels.npy")
     input_dim = eval_data.shape[1]
 
+    # Load scaler and normalize eval data
+    scaler_path = model_dir / "scaler.json"
+    scaler = json.loads(scaler_path.read_text())
+    scaler_mean = np.array(scaler["mean"], dtype=np.float32)
+    scaler_std = np.array(scaler["std"], dtype=np.float32)
+    eval_data_norm = ((eval_data - scaler_mean) / scaler_std).astype(np.float32)
+
     # Rebuild model and load weights
     model = _build_model(input_dim, latent_dim)
     model.load_state_dict(torch.load(model_dir / f"model-{model_version}.pt", weights_only=True))
@@ -52,9 +59,19 @@ def evaluate_model(
     model.eval()
 
     with torch.no_grad():
-        x = torch.from_numpy(eval_data).to(device)
+        x = torch.from_numpy(eval_data_norm).to(device)
         recon = model(x)
         scores = ((x - recon) ** 2).mean(dim=1).cpu().numpy()
+
+    # Auto-compute threshold from normal samples: mean + 3*std
+    normal_scores = scores[eval_labels == 0]
+    anomaly_threshold = float(normal_scores.mean() + 3.0 * normal_scores.std())
+    logger.info(
+        "threshold_computed",
+        threshold=round(anomaly_threshold, 6),
+        normal_mean=round(float(normal_scores.mean()), 6),
+        normal_std=round(float(normal_scores.std()), 6),
+    )
 
     preds = (scores > anomaly_threshold).astype(int)
 

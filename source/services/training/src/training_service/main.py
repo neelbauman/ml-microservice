@@ -119,12 +119,13 @@ async def handle_training_data_event(request: dict, background: BackgroundTasks)
 # Internal helpers
 # ──────────────────────────────────────────────
 def _is_training_data(key: str) -> bool:
-    """Check if an S3 object key looks like training data."""
-    training_extensions = {".npy", ".csv", ".parquet", ".npz"}
-    training_prefixes = {"training/", "data/", "datasets/"}
-    return any(key.endswith(ext) for ext in training_extensions) or any(
-        key.startswith(prefix) for prefix in training_prefixes
-    )
+    """Check if an S3 object key is the main training data file.
+
+    Only trigger on train.npy to avoid duplicate pipeline runs when
+    multiple files (train.npy, eval_data.npy, eval_labels.npy, metadata.json)
+    are uploaded together.
+    """
+    return key.endswith("/train.npy") or key == "train.npy"
 
 
 def _run_flow(event: TrainingTriggerEvent) -> None:

@@ -76,14 +76,14 @@ services:
     image: minio/mc:latest
     depends_on:
       minio: { condition: service_healthy }
-    entrypoint: >
-      /bin/sh -c "
-      mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin} &&
-      mc mb --ignore-existing local/mlflow-artifacts &&
-      mc mb --ignore-existing local/ml-models &&
-      mc mb --ignore-existing local/ml-data &&
-      echo 'Buckets created'
-      "
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        mc alias set local http://minio:9000 minioadmin minioadmin &&
+        mc mb --ignore-existing local/mlflow-artifacts &&
+        mc mb --ignore-existing local/ml-models &&
+        mc mb --ignore-existing local/ml-data &&
+        echo 'Buckets created'
 
   # ============================================================
   # ML Platform

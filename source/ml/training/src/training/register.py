@@ -86,6 +86,8 @@ def main() -> None:
     mlflow.set_tracking_uri(MLFLOW_URI)
     mlflow.set_experiment(EXPERIMENT)
 
+    scaler_path = MODEL_DIR / "scaler.json"
+
     with mlflow.start_run(run_name=f"register-{MODEL_VERSION}") as run:
         # Log and register the ONNX model in one step
         onnx_model = onnx.load(str(onnx_path))
@@ -94,6 +96,11 @@ def main() -> None:
             name="model",
             registered_model_name=REGISTRY_NAME,
         )
+
+        # Log scaler as artifact alongside the model
+        if scaler_path.exists():
+            mlflow.log_artifact(str(scaler_path))
+            logger.info("scaler_logged", path=str(scaler_path))
 
         logger.info(
             "register_done",

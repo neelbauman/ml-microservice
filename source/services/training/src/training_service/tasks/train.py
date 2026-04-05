@@ -48,7 +48,21 @@ def train_model(
     train_data = np.load(data_path / "train.npy")
     input_dim = train_data.shape[1]
 
-    dataset = TensorDataset(torch.from_numpy(train_data))
+    # Normalize: zero-mean, unit-variance per feature
+    train_mean = train_data.mean(axis=0).astype(np.float32)
+    train_std = train_data.std(axis=0).astype(np.float32)
+    train_std[train_std < 1e-8] = 1.0  # avoid division by zero
+    train_data_norm = ((train_data - train_mean) / train_std).astype(np.float32)
+
+    # Save scaler parameters for inference
+    import json
+
+    scaler = {"mean": train_mean.tolist(), "std": train_std.tolist()}
+    scaler_path = output_path / "scaler.json"
+    scaler_path.write_text(json.dumps(scaler, indent=2))
+    logger.info("scaler_saved", path=str(scaler_path))
+
+    dataset = TensorDataset(torch.from_numpy(train_data_norm))
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
     # Build model
@@ -103,10 +117,12 @@ def train_model(
             str(onnx_path),
             input_names=["input"],
             output_names=["output"],
+            dynamo=False,
         )
 
         mlflow.log_artifact(str(model_path))
         mlflow.log_artifact(str(onnx_path))
+        mlflow.log_artifact(str(scaler_path))
         mlflow.log_artifact(str(data_path / "metadata.json"))
 
         logger.info("train_done", run_id=run.info.run_id, model_path=str(model_path))

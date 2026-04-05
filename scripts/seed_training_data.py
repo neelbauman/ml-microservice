@@ -44,12 +44,21 @@ def build_dataset(
     eval_data = np.concatenate([normal[:500], anomaly])
     eval_labels = np.concatenate([np.zeros(500), np.ones(len(anomaly))])
 
+    # Compute scaler from training data (normal only)
+    scaler_mean = train_data.mean(axis=0).astype(np.float32)
+    scaler_std = train_data.std(axis=0).astype(np.float32)
+    scaler_std[scaler_std < 1e-8] = 1.0
+
     metadata = {
         "num_features": num_features,
         "feature_names": [f"sensor_{i}" for i in range(num_features)],
         "train_samples": num_normal,
         "eval_samples": len(eval_data),
         "anomaly_ratio": round(len(anomaly) / len(eval_data), 4),
+        "scaler": {
+            "mean": scaler_mean.tolist(),
+            "std": scaler_std.tolist(),
+        },
     }
 
     return train_data, eval_data, eval_labels, metadata

@@ -1,6 +1,7 @@
 """ONNX model manager — downloads from MLflow, runs via onnxruntime."""
 
 import asyncio
+import json
 import os
 from pathlib import Path
 
@@ -36,6 +37,8 @@ class ModelManager:
         self._model_version: str = ""
         self._input_dim: int = 0
         self._anomaly_threshold: float = 0.05
+        self._scaler_mean: np.ndarray | None = None
+        self._scaler_std: np.ndarray | None = None
 
     @property
     def is_loaded(self) -> bool:
@@ -85,11 +88,22 @@ class ModelManager:
         )
 
         # Find the ONNX file in the downloaded directory
-        onnx_files = list(Path(local_path).rglob("*.onnx"))
+        local_dir = Path(local_path)
+        onnx_files = list(local_dir.rglob("*.onnx"))
         if not onnx_files:
             raise FileNotFoundError(f"No .onnx file found in {local_path}")
 
         onnx_path = onnx_files[0]
+
+        # Load scaler if available (saved during training)
+        scaler_mean = None
+        scaler_std = None
+        scaler_files = list(local_dir.rglob("scaler.json"))
+        if scaler_files:
+            scaler = json.loads(scaler_files[0].read_text())
+            scaler_mean = np.array(scaler["mean"], dtype=np.float32)
+            scaler_std = np.array(scaler["std"], dtype=np.float32)
+            await logger.ainfo("scaler_loaded", features=len(scaler_mean))
 
         # Create new session with GPU support if available
         providers = _get_ort_providers()
@@ -105,6 +119,8 @@ class ModelManager:
         self._model_name = model_name
         self._model_version = model_version
         self._input_dim = input_dim or model_input_dim
+        self._scaler_mean = scaler_mean
+        self._scaler_std = scaler_std
         if anomaly_threshold is not None:
             self._anomaly_threshold = anomaly_threshold
 
@@ -115,6 +131,7 @@ class ModelManager:
             onnx_path=str(onnx_path),
             input_dim=self._input_dim,
             anomaly_threshold=self._anomaly_threshold,
+            has_scaler=scaler_mean is not None,
             ort_providers=new_session.get_providers(),
         )
 
@@ -141,6 +158,21 @@ class ModelManager:
 
             latest = max(versions, key=lambda v: int(v.version))
             model_uri = f"models:/{registry_name}/{latest.version}"
+
+            # Also download scaler from the run artifacts
+            run_id = latest.run_id
+            try:
+                scaler_dir = await asyncio.to_thread(
+                    mlflow.artifacts.download_artifacts,
+                    run_id=run_id,
+                    artifact_path="scaler.json",
+                )
+                scaler_data = json.loads(Path(scaler_dir).read_text())
+                self._scaler_mean = np.array(scaler_data["mean"], dtype=np.float32)
+                self._scaler_std = np.array(scaler_data["std"], dtype=np.float32)
+                await logger.ainfo("scaler_loaded_from_run", run_id=run_id)
+            except Exception:
+                await logger.awarning("scaler_not_found_in_run", run_id=run_id)
 
             await logger.ainfo(
                 "startup_model_found",
@@ -191,8 +223,10 @@ class ModelManager:
             )
             input_features = input_features[:expected_dim]
 
-        # Prepare input
+        # Prepare input and normalize if scaler is available
         input_array = np.array([input_features], dtype=np.float32)
+        if self._scaler_mean is not None and self._scaler_std is not None:
+            input_array = (input_array - self._scaler_mean) / self._scaler_std
         input_name = session.get_inputs()[0].name
 
         # Run inference

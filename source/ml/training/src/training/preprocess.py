@@ -240,6 +240,12 @@ def main() -> None:
     np.save(OUTPUT_DIR / "eval_data.npy", eval_data)
     np.save(OUTPUT_DIR / "eval_labels.npy", eval_labels)
 
+    # Save scaler (computed from training data for normalization)
+    scaler_mean = normal.mean(axis=0).astype(np.float32)
+    scaler_std = normal.std(axis=0).astype(np.float32)
+    scaler_std[scaler_std < 1e-8] = 1.0
+    logger.info("scaler_computed", mean=scaler_mean.tolist(), std=scaler_std.tolist())
+
     # Save metadata
     meta = {
         "num_features": NUM_FEATURES,

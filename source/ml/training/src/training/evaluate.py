@@ -19,7 +19,6 @@ MODEL_DIR = Path(os.getenv("MODEL_OUTPUT_DIR", "/tmp/ml-models"))
 MLFLOW_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5001")
 EXPERIMENT = os.getenv("MLFLOW_EXPERIMENT_NAME", "anomaly-detection")
 MODEL_VERSION = os.getenv("MODEL_VERSION", "v1.0.0")
-THRESHOLD = float(os.getenv("ANOMALY_THRESHOLD", "0.05"))
 
 
 def _get_device() -> torch.device:
@@ -33,10 +32,17 @@ def main() -> None:
     device = _get_device()
     logger.info("evaluate_start", model_version=MODEL_VERSION, device=str(device))
 
-    # Load eval data
+    # Load scaler
+    scaler_path = MODEL_DIR / "scaler.json"
+    scaler = json.loads(scaler_path.read_text())
+    scaler_mean = np.array(scaler["mean"], dtype=np.float32)
+    scaler_std = np.array(scaler["std"], dtype=np.float32)
+
+    # Load eval data and normalize with training scaler
     eval_data = np.load(DATA_DIR / "eval_data.npy")
     eval_labels = np.load(DATA_DIR / "eval_labels.npy")
     input_dim = eval_data.shape[1]
+    eval_data_norm = ((eval_data - scaler_mean) / scaler_std).astype(np.float32)
 
     # Rebuild model and load weights
     from training.train import _build_model
@@ -46,21 +52,28 @@ def main() -> None:
     model.to(device)
     model.eval()
 
-    # Compute anomaly scores (reconstruction error)
+    # Compute anomaly scores (reconstruction error on normalized data)
     with torch.no_grad():
-        x = torch.from_numpy(eval_data).to(device)
+        x = torch.from_numpy(eval_data_norm).to(device)
         recon = model(x)
         scores = ((x - recon) ** 2).mean(dim=1).cpu().numpy()
 
+    # Auto-compute threshold from normal samples: mean + 3*std of normal reconstruction errors
+    normal_scores = scores[eval_labels == 0]
+    threshold = float(normal_scores.mean() + 3.0 * normal_scores.std())
+    logger.info("threshold_computed", threshold=round(threshold, 6),
+                normal_mean=round(float(normal_scores.mean()), 6),
+                normal_std=round(float(normal_scores.std()), 6))
+
     # Binary predictions
-    preds = (scores > THRESHOLD).astype(int)
+    preds = (scores > threshold).astype(int)
 
     metrics = {
         "auc_roc": float(roc_auc_score(eval_labels, scores)),
         "precision": float(precision_score(eval_labels, preds, zero_division=0)),
         "recall": float(recall_score(eval_labels, preds, zero_division=0)),
         "f1": float(f1_score(eval_labels, preds, zero_division=0)),
-        "threshold": THRESHOLD,
+        "threshold": threshold,
         "mean_normal_score": float(scores[eval_labels == 0].mean()),
         "mean_anomaly_score": float(scores[eval_labels == 1].mean()),
     }

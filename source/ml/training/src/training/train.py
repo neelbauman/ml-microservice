@@ -1,5 +1,6 @@
 """Training script — trains autoencoder and logs to MLflow."""
 
+import json
 import os
 from pathlib import Path
 
@@ -67,8 +68,24 @@ def main() -> None:
     input_dim = train_data.shape[1]
     logger.info("data_loaded", shape=list(train_data.shape))
 
+    # Normalize: zero-mean, unit-variance per feature
+    train_mean = train_data.mean(axis=0).astype(np.float32)
+    train_std = train_data.std(axis=0).astype(np.float32)
+    train_std[train_std < 1e-8] = 1.0  # avoid division by zero
+    train_data_norm = ((train_data - train_mean) / train_std).astype(np.float32)
+
+    # Save scaler parameters for inference
+    scaler = {
+        "mean": train_mean.tolist(),
+        "std": train_std.tolist(),
+    }
+    scaler_path = MODEL_OUTPUT / "scaler.json"
+    MODEL_OUTPUT.mkdir(parents=True, exist_ok=True)
+    scaler_path.write_text(json.dumps(scaler, indent=2))
+    logger.info("scaler_saved", path=str(scaler_path))
+
     # Dataset / DataLoader
-    dataset = TensorDataset(torch.from_numpy(train_data))
+    dataset = TensorDataset(torch.from_numpy(train_data_norm))
     loader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
 
     # Model
@@ -123,6 +140,7 @@ def main() -> None:
         # Log artifacts
         mlflow.log_artifact(str(model_path))
         mlflow.log_artifact(str(onnx_path))
+        mlflow.log_artifact(str(scaler_path))
         mlflow.log_artifact(str(DATA_DIR / "metadata.json"))
 
         logger.info("train_done", run_id=run.info.run_id, model_path=str(model_path))
